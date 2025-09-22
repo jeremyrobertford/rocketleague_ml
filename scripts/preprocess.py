@@ -11,23 +11,38 @@ from pathlib import Path
 from rocketleague_ml.data.loader import load_replay
 from rocketleague_ml.config import RAW_REPLAYS, PROCESSED
 
-def ensure_dir(p):
+
+def ensure_dir(p: str):
     Path(p).mkdir(parents=True, exist_ok=True)
+
 
 def is_replay_file(fname: str):
     return fname.lower().endswith(".replay")
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Parse .replay files with rrrocket and save JSON.")
-    parser.add_argument("--input", "-i", default=RAW_REPLAYS, help="Folder with .replay files")
-    parser.add_argument("--output", "-o", default=os.path.join(PROCESSED, "json"),
-                        help="Folder to write rrrocket JSON files")
-    parser.add_argument("--bin-path", default=None, help="Optional path to rrrocket executable")
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing JSON files")
+    parser = argparse.ArgumentParser(
+        description="Parse .replay files with rrrocket and save JSON."
+    )
+    parser.add_argument(
+        "--input", "-i", default=RAW_REPLAYS, help="Folder with .replay files"
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default=os.path.join(PROCESSED, "json"),
+        help="Folder to write rrrocket JSON files",
+    )
+    parser.add_argument(
+        "--bin-path", default=None, help="Optional path to rrrocket executable"
+    )
+    parser.add_argument(
+        "--overwrite", action="store_true", help="Overwrite existing JSON files"
+    )
     args = parser.parse_args()
 
-    in_dir = args.input
-    out_dir = args.output
+    in_dir: str = args.input
+    out_dir: str = args.output
     ensure_dir(out_dir)
 
     replay_files = sorted([f for f in os.listdir(in_dir) if is_replay_file(f)])
@@ -62,6 +77,7 @@ def main():
     print()
     print(f"Done. succeeded={succeeded}, failed={failed}")
     print(f"Saved JSON to: {out_dir}")
+
 
 if __name__ == "__main__":
     main()

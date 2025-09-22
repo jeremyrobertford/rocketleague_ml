@@ -7,6 +7,7 @@ import subprocess
 import json
 import os
 import shutil
+from typing import Any
 
 from rocketleague_ml.config import BASE_DIR
 
@@ -14,7 +15,10 @@ from rocketleague_ml.config import BASE_DIR
 DEFAULT_BIN_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "bin"))
 DEFAULT_RRROCKET = os.path.join(DEFAULT_BIN_DIR, "rrrocket.exe")  # Windows binary name
 
-def find_rrrocket(rrrocket_path: str | None = None, raise_error: bool = True) -> str:
+
+def find_rrrocket(
+    rrrocket_path: str | None = None, raise_error: bool = True
+) -> str | None:
     """
     Resolve rrrocket executable path.
     Priority:
@@ -39,7 +43,7 @@ def find_rrrocket(rrrocket_path: str | None = None, raise_error: bool = True) ->
     return None
 
 
-def load_replay(file_path: str, rrrocket_path: str | None = None) -> dict:
+def load_replay(file_path: str, rrrocket_path: str | None = None) -> dict[str, Any]:
     """
     Run rrrocket on a replay and return parsed JSON as a Python dict.
 
@@ -55,7 +59,7 @@ def load_replay(file_path: str, rrrocket_path: str | None = None) -> dict:
     dict
         Parsed JSON output from rrrocket.
     """
-    rrexe = find_rrrocket(rrrocket_path)
+    rrexe: str = find_rrrocket(rrrocket_path)  # pyright: ignore[reportAssignmentType]
 
     # call rrrocket. This assumes rrrocket supports a '--json' flag (common).
     # If your rrrocket build uses a different flag, change below.
@@ -76,6 +80,8 @@ def load_replay(file_path: str, rrrocket_path: str | None = None) -> dict:
     try:
         replay_json = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse JSON from rrrocket for {file_path}: {e}") from e
+        raise ValueError(
+            f"Failed to parse JSON from rrrocket for {file_path}: {e}"
+        ) from e
 
     return replay_json
