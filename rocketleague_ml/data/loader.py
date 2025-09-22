@@ -14,32 +14,29 @@ from rocketleague_ml.config import BASE_DIR
 DEFAULT_BIN_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "bin"))
 DEFAULT_RRROCKET = os.path.join(DEFAULT_BIN_DIR, "rrrocket.exe")  # Windows binary name
 
-def find_rrrocket(rrrocket_path: str | None = None) -> str:
+def find_rrrocket(rrrocket_path: str | None = None, raise_error: bool = True) -> str:
     """
     Resolve rrrocket executable path.
     Priority:
       1. rrrocket_path argument
       2. bin/rrrocket.exe next to repo
       3. rrrocket on PATH (shutil.which)
-    Raises FileNotFoundError if not found.
+      4.a. Returns the path if found or None if not found and raise_error=False
+      4.b. Raises FileNotFoundError if not found and raise_error=True.
     """
-    if rrrocket_path:
-        if os.path.exists(rrrocket_path):
-            return rrrocket_path
-        raise FileNotFoundError(f"Provided rrrocket path does not exist: {rrrocket_path}")
-
-    # default location
-    if os.path.exists(DEFAULT_RRROCKET):
-        return DEFAULT_RRROCKET
-
-    # try PATH
+    if rrrocket_path and os.path.exists(rrrocket_path):
+        return rrrocket_path
+    default_path = os.path.join(DEFAULT_BIN_DIR, "rrrocket.exe")
+    if os.path.exists(default_path):
+        return default_path
     which_path = shutil.which("rrrocket")
     if which_path:
         return which_path
-
-    raise FileNotFoundError(
-        f"rrrocket executable not found. Place it in {DEFAULT_BIN_DIR} or supply --bin-path."
-    )
+    if raise_error:
+        raise FileNotFoundError(
+            f"rrrocket executable not found. Place it in {DEFAULT_BIN_DIR} or supply --bin-path."
+        )
+    return None
 
 
 def load_replay(file_path: str, rrrocket_path: str | None = None) -> dict:
