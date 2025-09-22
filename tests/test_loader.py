@@ -9,8 +9,9 @@ from rocketleague_ml.config import BASE_DIR
 
 # Path to your single test replay
 TEST_REPLAY = os.path.join(BASE_DIR, "..", "data", "raw", "replay.replay")
+rrrocket_path = find_rrrocket(raise_error=None)
 
-@pytest.mark.skipif(not find_rrrocket(), reason="rrrocket.exe not found")
+@pytest.mark.skipif(rrrocket_path is None, reason="rrrocket.exe not found")
 def test_load_replay_and_save_json():
     """End-to-end test: parse a replay and save JSON to a temp folder."""
     # Create temporary folder to save JSON
