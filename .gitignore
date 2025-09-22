@@ -35,3 +35,8 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+
+# Coverage / testing
+.coverage
+htmlcov/
+.pytest_cache/
