@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Replay files (can be huge)
+data/raw/*.replay
+data/processed/*.csv
+data/processed/*.json
+data/processed/*.pkl
+
+# Model artifacts
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.onnx
+
+# Logs
+logs/
+*.log
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
