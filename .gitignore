@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+bin/rrrocket.exe
 
 # Virtual environment
 .venv/
@@ -14,8 +15,8 @@ ENV/
 
 # Replay files (can be huge)
 data/raw/*.replay
-data/processed/*.csv
-data/processed/*.json
+data/processed/**/*.csv
+data/processed/**/*.json
 data/processed/*.pkl
 
 # Model artifacts
