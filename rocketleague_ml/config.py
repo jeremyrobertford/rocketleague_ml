@@ -9,3 +9,7 @@ PROCESSED = os.path.join(DATA_DIR, "processed")
 # Training configs
 RANDOM_SEED = 42
 TEST_SIZE = 0.2
+
+# Feature configs
+# Simplify entire map into a 3 x 3 x 3 grid
+map_simplification_areas = [3, 3, 3]
