@@ -7,7 +7,7 @@ import subprocess
 import json
 import os
 import shutil
-from typing import Any
+from typing import Dict, Any
 
 from rocketleague_ml.config import BASE_DIR
 
@@ -43,7 +43,7 @@ def find_rrrocket(
     return None
 
 
-def load_replay(file_path: str, rrrocket_path: str | None = None) -> dict[str, Any]:
+def load_replay(file_path: str, rrrocket_path: str | None = None) -> Dict[str, Any]:
     """
     Run rrrocket on a replay and return parsed JSON as a Python dict.
 

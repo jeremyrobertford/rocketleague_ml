@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import TypedDict, Dict, Any
 
 
 class BaseGameStats(TypedDict):
@@ -136,6 +136,13 @@ class BaseGameStats(TypedDict):
     percentage_in_air_over_crossbar: float
     fifty_fifties: int
 
+    # Kickoffs
+    kickoffs: int
+    average_seconds_to_kickoff_ball: float
+    average_speed_of_kickoff_ball: float
+    # map size dependent on config.map_simplification_areas
+    kickoff_ball_spillout_map: dict[int, int]
+
 
 class AugmentedGameStats(TypedDict):
     percentage_with_augment: int
@@ -166,3 +173,19 @@ class GameStats(TypedDict):
     general: AugmentedGameStats
     with_possession: AugmentedGameStats
     without_possession: AugmentedGameStats
+
+
+class TaggedStats(TypedDict):
+    instances: int
+    total_seconds: float
+    deactivating_frame: Dict[str, Any] | None
+    active: bool
+
+
+class TaggedStatsWithMetrics(TaggedStats):
+    metrics: Dict[str, Any]
+
+
+class TrackerDict(TypedDict):
+    metrics: Dict[str, Any]
+    tags: Dict[str, TaggedStats]
