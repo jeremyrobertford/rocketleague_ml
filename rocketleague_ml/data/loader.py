@@ -86,3 +86,29 @@ def load_replay(file_path: str, rrrocket_path: str | None = None):
         ) from e
 
     return cast(Raw_Game_Data, replay_json)
+
+
+def load_preprocessed_replay(file_path: str):
+    """
+    Load preprocessed replay JSON as a Python dict.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the .replay file.
+
+    Returns
+    -------
+    dict
+        Parsed JSON output from rrrocket.
+    """
+
+    # parse stdout as JSON
+    try:
+        with open(file_path, "r") as f:
+            replay_json = json.load(f)
+            return cast(Raw_Game_Data, replay_json)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"Failed to parse JSON from rrrocket for {file_path}: {e}"
+        ) from e

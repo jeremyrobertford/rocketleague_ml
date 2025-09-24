@@ -33,6 +33,12 @@ class Rigid_Body_Positioning(TypedDict):
     angular_velocity: Position_Dict | None
 
 
+class Time_Labeled_Rigid_Body_Positioning(Rigid_Body_Positioning):
+    round: int
+    time: float
+    delta: float
+
+
 class Positioning_Dict(Rigid_Body_Positioning):
     time: float | None
 
@@ -84,6 +90,25 @@ class Cam_Settings_Attribute(TypedDict):
     CamSettings: Camera_Settings_Attribute
 
 
+class Stat_Event(TypedDict):
+    unknown1: bool
+    object_id: int
+
+
+class Stat_Event_Attribute(TypedDict):
+    StatEvent: Stat_Event
+
+
+class Labeled_Stat_Event(TypedDict):
+    unknown1: bool
+    object_id: int
+    object: str
+
+
+class Labeled_Stat_Event_Attribute(TypedDict):
+    StatEvent: Labeled_Stat_Event
+
+
 Attribute = (
     String_Attribute
     | Float_Attribute
@@ -93,6 +118,19 @@ Attribute = (
     | Active_Attribute
     | Boolean_Attribute
     | Cam_Settings_Attribute
+    | Stat_Event_Attribute
+)
+
+Labeled_Attribute = (
+    String_Attribute
+    | Float_Attribute
+    | Byte_Attribute
+    | Int_Attribute
+    | Rigid_Body_Attribute
+    | Active_Attribute
+    | Boolean_Attribute
+    | Cam_Settings_Attribute
+    | Labeled_Stat_Event_Attribute
 )
 
 
@@ -106,9 +144,16 @@ class Raw_Actor(TypedDict):
     initial_trajectory: Trajectory | None
 
 
-class Labeled_Raw_Actor(Raw_Actor):
+class Labeled_Raw_Actor(TypedDict):
     name: str | None
     object: str
+    actor_id: int
+    active_actor_id: int | None
+    name_id: int | None
+    steam_id: int | None
+    object_id: int
+    attribute: Labeled_Attribute | None
+    initial_trajectory: Trajectory | None
 
 
 class Raw_Frame(TypedDict):
@@ -125,5 +170,6 @@ class Network_Frames(TypedDict):
 
 
 class Raw_Game_Data(TypedDict):
+    names: List[str]
     objects: List[str]
     network_frames: Network_Frames

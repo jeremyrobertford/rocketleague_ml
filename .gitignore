@@ -15,9 +15,12 @@ ENV/
 
 # Replay files (can be huge)
 data/raw/*.replay
+data/preprocessed/**/*.csv
+data/preprocessed/**/*.json
+data/preprocessed/**/*.pkl
 data/processed/**/*.csv
 data/processed/**/*.json
-data/processed/*.pkl
+data/processed/**/*.pkl
 
 # Model artifacts
 *.pkl

@@ -4,6 +4,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "..", "data")
 RAW_REPLAYS = os.path.join(DATA_DIR, "raw")
+PREPROCESSED = os.path.join(DATA_DIR, "preprocessed")
 PROCESSED = os.path.join(DATA_DIR, "processed")
 
 # Training configs
@@ -60,7 +61,12 @@ LABELS = {
     "TAGame.CarComponent_TA:Vehicle": "vehicle",
     "TAGame.Ball_TA:GameEvent": "event",
     "TAGame.PRI_TA:ReplicatedGameEvent": "event",
-    "TAGame.GameEvent_TA:ReplicatedStateName": "event",
+    "TAGame.GameEvent_TA:ReplicatedGameStateTimeRemaining": "event",
+    "TAGame.GameEvent_TA:ReplicatedStateName": "game_start_event",
+    "TAGame.GameEvent_TA:ReplicatedRoundCountDownNumber": "round_countdown_event",
+    "TAGame.GameEvent_Soccar_TA:bBallHasBeenHit": "team_hit_ball_change_event",
+    "TAGame.GameEvent_Soccar_TA:RoundNum": "round_number_event",
+    "StatEvents.Events.Goal": "goal_event",
     "Archetypes.Ball.Ball_Default": "ball",
     "Archetypes.Car.Car_Default": "car",
     "Engine.PlayerReplicationInfo:PlayerName": "player",

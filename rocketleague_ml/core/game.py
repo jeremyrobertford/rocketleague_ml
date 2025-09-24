@@ -8,10 +8,14 @@ from rocketleague_ml.core.player import Player, Player_Component
 class Game:
 
     def __init__(self, game_data: Raw_Game_Data):
+        self.names = {i: obj for i, obj in enumerate(game_data["names"])}
         self.objects = {i: obj for i, obj in enumerate(game_data["objects"])}
         self.initial_frame = game_data["network_frames"]["frames"][0]
         self.frames = game_data["network_frames"]["frames"][1:]
+        self.last_frame: Raw_Frame | None = self.initial_frame
         self.active = False
+        self.round = 0
+        self.cars: Dict[int, Car] = {}
         self.players: Dict[int, Player] = {}
         self.get_players()
 
@@ -81,15 +85,52 @@ class Game:
             player.update_components(player_components)
             self.players[player.actor_id] = player
             if player.car:
-                self.players[player.car.actor_id] = player
+                self.cars[player.car.actor_id] = player.car
 
-    def analyze_frame(self, frame: Raw_Frame):
+    def activate_game(self):
+        self.round += 1
+        self.active = True
+        if not self.last_frame:
+            raise ValueError("No last inactive frame in inactive game")
+        for car in self.cars.values():
+            # initialize positions
+            car.update_position(car, self.active, self.last_frame, self.round)
 
-        if frame["time"] >= 22 and frame["time"] <= 25:
-            print(1)
+    def deactivate_game(self):
+        self.active = False
 
+    def resync(self, frame: Raw_Frame):
+        self.last_frame = frame
+        return
+
+    def analyze_frame(self, frame: Raw_Frame, frame_index: int | None = None):
+        resync_frame = len(frame["new_actors"]) + len(frame["updated_actors"]) > 80
+
+        if frame_index and frame_index > 1754 and frame_index < 1780:
+            print(2)
+
+        events: List[Actor] = []
+
+        updated_actors: List[Actor] = []
         for ua in frame["updated_actors"]:
             updated_actor = Actor(ua, self.objects)
+            updated_actors.append(updated_actor)
+
+            if updated_actor.category == "game_start_event" and not resync_frame:
+                attribute = updated_actor.raw.get("attribute")
+                if not attribute or "Int" not in attribute:
+                    raise ValueError("Game active state not valid {updated_actor.raw}")
+                name = self.names[attribute["Int"]]
+                if name == "Active":
+                    self.activate_game()
+                elif name == "PostGoalScored":
+                    self.deactivate_game()
+                else:
+                    print(name)
+
+        for updated_actor in updated_actors:
+            if updated_actor.actor_id == 8:
+                events.append(updated_actor)
             attribute = updated_actor.raw.get("attribute")
             if not attribute:
                 continue
@@ -97,8 +138,12 @@ class Game:
             if not rigid_body:
                 continue
 
-            player = self.players.get(updated_actor.actor_id)
-            if player and player.car:
-                player.car.update_position(updated_actor)
+            car = self.cars.get(updated_actor.actor_id)
+            if car:
+                car.update_position(updated_actor, self.active, frame, self.round)
 
+        if len(events) > 0:
+            print(1)
+
+        self.last_frame = frame
         return
