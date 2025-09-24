@@ -1,6 +1,5 @@
 from typing import List
 from rocketleague_ml.utils.helpers import convert_byte_to_float
-from rocketleague_ml.core.positioning import Positioning
 from rocketleague_ml.core.actor import Actor
 
 
@@ -27,7 +26,8 @@ class Car_Component(Actor):
 class Car(Actor):
     def __init__(self, car: Actor):
         super().__init__(car.raw, car.objects)
-        self.positioning: Positioning | None = None
+        if not self.positioning:
+            raise ValueError(f"Car failed to position {car.raw}")
         self.boost: Car_Component | None = None
         self.jump: Car_Component | None = None
         self.dodge: Car_Component | None = None
@@ -59,7 +59,7 @@ class Car(Actor):
 
     def update_components(self, car_components: List[Car_Component]):
         for car_component in car_components:
-            if not self.owns(car_component):
+            if self.owns(car_component):
                 continue
             if self.steer is None and car_component.secondary_category == "steer":
                 self.steer = car_component

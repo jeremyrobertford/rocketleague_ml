@@ -9,6 +9,7 @@ import argparse
 from pathlib import Path
 
 from rocketleague_ml.data.loader import load_replay
+from rocketleague_ml.models.process import process_game
 from rocketleague_ml.config import RAW_REPLAYS, PROCESSED
 
 
@@ -69,6 +70,8 @@ def main():
                 json.dump(replay_json, fh, indent=2, ensure_ascii=False)
             print("OK")
             succeeded += 1
+            print("Processing {fname}...")
+            process_game(replay_json)
         except Exception as e:
             print("FAILED")
             print(f"  {type(e).__name__}: {e}")

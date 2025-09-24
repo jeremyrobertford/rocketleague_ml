@@ -7,9 +7,10 @@ import subprocess
 import json
 import os
 import shutil
-from typing import Dict, Any
+from typing import cast
 
 from rocketleague_ml.config import BASE_DIR
+from rocketleague_ml.types.attributes import Raw_Game_Data
 
 # Default location in the repo
 DEFAULT_BIN_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "bin"))
@@ -43,7 +44,7 @@ def find_rrrocket(
     return None
 
 
-def load_replay(file_path: str, rrrocket_path: str | None = None) -> Dict[str, Any]:
+def load_replay(file_path: str, rrrocket_path: str | None = None):
     """
     Run rrrocket on a replay and return parsed JSON as a Python dict.
 
@@ -84,4 +85,4 @@ def load_replay(file_path: str, rrrocket_path: str | None = None) -> Dict[str, A
             f"Failed to parse JSON from rrrocket for {file_path}: {e}"
         ) from e
 
-    return replay_json
+    return cast(Raw_Game_Data, replay_json)

@@ -14,12 +14,23 @@ class Rotation_Dict(TypedDict):
     w: float
 
 
+class Euler_Rotation_Dict(TypedDict):
+    yaw: float | None  # radians
+    pitch: float | None  # degrees
+    roll: float | None
+
+
+class Trajectory(TypedDict):
+    location: Position_Dict
+    rotation: Euler_Rotation_Dict | None
+
+
 class Rigid_Body_Positioning(TypedDict):
     sleeping: bool
     location: Position_Dict
-    rotation: Rotation_Dict
-    linear_velocty: Position_Dict
-    angular_velocty: Position_Dict
+    rotation: Rotation_Dict | Euler_Rotation_Dict
+    linear_velocity: Position_Dict | None
+    angular_velocity: Position_Dict | None
 
 
 class Positioning_Dict(Rigid_Body_Positioning):
@@ -92,6 +103,7 @@ class Raw_Actor(TypedDict):
     steam_id: int | None
     object_id: int
     attribute: Attribute | None
+    initial_trajectory: Trajectory | None
 
 
 class Labeled_Raw_Actor(Raw_Actor):
@@ -105,6 +117,7 @@ class Raw_Frame(TypedDict):
     new_actors: List[Raw_Actor]
     deleted_actors: List[int]
     updated_actors: List[Raw_Actor]
+    initial_trajectory: Trajectory | None
 
 
 class Network_Frames(TypedDict):

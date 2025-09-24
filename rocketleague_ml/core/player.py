@@ -47,24 +47,20 @@ class Player(Actor):
                     self.car = car
                     break
 
-    def assign_camera_settings(self, camera_settings: List[Actor]):
-        player_camera_settings: List[Actor] = []
-        for camera_setting in camera_settings:
-            if self.camera_settings is None and self.owns(camera_setting):
+    def assign_camera_settings(
+        self, camera_settings: List[Actor], camera_settings_connections: List[Actor]
+    ):
+        for camera_setting in camera_settings_connections:
+            if self.owns(camera_setting):
                 self.camera_settings = CameraSettings(camera_setting)
-            elif self.camera_settings is not None and self.camera_settings.is_self(
-                camera_setting
-            ):
-                player_camera_settings.append(camera_setting)
-            elif self.camera_settings is None:
-                player_camera_settings.append(camera_setting)
+                break
 
         if not self.camera_settings:
             raise ValueError("Failed to assign camera settings to player {self.name}")
 
-        for player_camera_setting in player_camera_settings:
-            if self.camera_settings.is_self(player_camera_setting):
-                self.camera_settings.update_settings(player_camera_setting)
+        for camera_setting in camera_settings:
+            if self.camera_settings.is_self(camera_setting):
+                self.camera_settings.update_settings(camera_setting)
 
     def update_camera_settings(self, camera_settings: List[Actor]):
         if not self.camera_settings:

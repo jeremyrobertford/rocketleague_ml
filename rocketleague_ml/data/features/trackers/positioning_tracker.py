@@ -30,8 +30,8 @@ class Positioning_Tracker(Tracker):
         self.sleeping = new_positioning["sleeping"]
         self.location = new_positioning["location"]
         self.rotation = new_positioning["rotation"]
-        self.linear_velocty = new_positioning["linear_velocty"]
-        self.angular_velocty = new_positioning["angular_velocty"]
+        self.linear_velocity = new_positioning["linear_velocity"]
+        self.angular_velocity = new_positioning["angular_velocity"]
 
     def to_dict(self) -> Positioning_Dict:
         return {
@@ -39,6 +39,6 @@ class Positioning_Tracker(Tracker):
             "sleeping": self.sleeping,
             "location": self.location,
             "rotation": self.rotation,
-            "linear_velocty": self.linear_velocty,
-            "angular_velocty": self.angular_velocty,
+            "linear_velocity": self.linear_velocity,
+            "angular_velocity": self.angular_velocity,
         }

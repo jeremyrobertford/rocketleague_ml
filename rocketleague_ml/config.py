@@ -66,4 +66,5 @@ LABELS = {
     "Engine.PlayerReplicationInfo:PlayerName": "player",
     "Engine.Pawn:PlayerReplicationInfo": "car_to_player",
     "TAGame.RBActor_TA:ReplicatedRBState": "rigid_body",
+    "TAGame.CameraSettingsActor_TA:PRI": "settings_to_player",
 }

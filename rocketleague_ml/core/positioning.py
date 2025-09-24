@@ -1,8 +1,10 @@
 from math import sqrt, atan2, acos
+from rocketleague_ml.utils.helpers import convert_euler_to_quat
 from rocketleague_ml.types.attributes import (
     Position_Dict,
     Rotation_Dict,
     Rigid_Body_Positioning,
+    Trajectory,
 )
 
 
@@ -13,6 +15,16 @@ class Base_Position:
         self.y = position["y"]
         self.z = position["z"]
 
+    def copy(self):
+        return Base_Position(self.to_dict())
+
+    def to_dict(self) -> Position_Dict:
+        return {
+            "x": self.x,
+            "y": self.y,
+            "z": self.z,
+        }
+
 
 class Rotation:
     def __init__(self, rotation: Rotation_Dict):
@@ -21,6 +33,17 @@ class Rotation:
         self.y = rotation["y"]
         self.z = rotation["z"]
         self.w = rotation["w"]
+
+    def copy(self):
+        return Rotation(self.to_dict())
+
+    def to_dict(self) -> Rotation_Dict:
+        return {
+            "x": self.x,
+            "y": self.y,
+            "z": self.z,
+            "w": self.w,
+        }
 
 
 class Vector:
@@ -83,9 +106,47 @@ class Velocity(Position):
 
 
 class Positioning:
-    def __init__(self, positioning: Rigid_Body_Positioning):
-        self.sleeping = positioning["sleeping"]
-        self.location = positioning["location"]
-        self.rotation = positioning["rotation"]
-        self.linear_velocty = positioning["linear_velocty"]
-        self.angular_velocty = positioning["angular_velocty"]
+    def __init__(self, positioning: Rigid_Body_Positioning | Trajectory):
+        location = positioning["location"] or {"x": 0, "y": 0, "z": 0}
+        self.location = Position(location)
+        rotation = positioning["rotation"] or {"x": 0, "y": 0, "z": 0, "w": 0}
+        if "yaw" in rotation:
+            self.rotation = Rotation(
+                convert_euler_to_quat(
+                    rotation["yaw"], rotation["pitch"], rotation["roll"]
+                )
+            )
+        else:
+            self.rotation = Rotation(rotation)
+
+        self.sleeping = positioning["sleeping"] if "sleeping" in positioning else True
+        self.linear_velocity = (
+            Position(positioning["linear_velocity"])
+            if "linear_velocity" in positioning and positioning["linear_velocity"]
+            else None
+        )
+        self.angular_velocity = (
+            Position(positioning["angular_velocity"])
+            if "angular_velocity" in positioning and positioning["angular_velocity"]
+            else None
+        )
+
+    def copy(self):
+        return Positioning(self.to_dict())
+
+    def to_dict(self) -> Rigid_Body_Positioning:
+        location = self.location.to_dict()
+        rotation = self.rotation.to_dict()
+        linear_velocity = (
+            self.linear_velocity.to_dict() if self.linear_velocity else None
+        )
+        angular_velocity = (
+            self.angular_velocity.to_dict() if self.angular_velocity else None
+        )
+        return {
+            "sleeping": self.sleeping,
+            "location": location,
+            "rotation": rotation,
+            "linear_velocity": linear_velocity,
+            "angular_velocity": angular_velocity,
+        }
