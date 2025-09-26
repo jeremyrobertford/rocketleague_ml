@@ -1,4 +1,5 @@
-from typing import TypedDict, List
+from __future__ import annotations
+from typing import TypedDict, List, Union, Dict
 
 
 class Position_Dict(TypedDict):
@@ -37,6 +38,24 @@ class Time_Labeled_Rigid_Body_Positioning(Rigid_Body_Positioning):
     round: int
     time: float
     delta: float
+
+
+class Time_Labeled_Attacker_Demo(TypedDict):
+    round: int
+    time: float
+    delta: float
+    velocity: Position_Dict
+    victim_actor_id: int
+    victim_velocity: Position_Dict
+
+
+class Time_Labeled_Victim_Demo(TypedDict):
+    round: int
+    time: float
+    delta: float
+    velocity: Position_Dict
+    attacker_actor_id: int
+    attacker_velocity: Position_Dict
 
 
 class Positioning_Dict(Rigid_Body_Positioning):
@@ -109,6 +128,21 @@ class Labeled_Stat_Event_Attribute(TypedDict):
     StatEvent: Labeled_Stat_Event
 
 
+class Demolition_Attribute(TypedDict):
+    attacker_pri: Active_Actor_Attribute
+    self_demo: Active_Actor_Attribute
+    self_demolish: bool
+    goal_explosion_owner: Active_Actor_Attribute
+    attacker: Active_Actor_Attribute
+    victim: Active_Actor_Attribute
+    attacker_velocity: Position_Dict
+    victim_velocity: Position_Dict
+
+
+class Demolish_Extended_Attribute(TypedDict):
+    DemolishExtended: Demolition_Attribute
+
+
 Attribute = (
     String_Attribute
     | Float_Attribute
@@ -119,6 +153,7 @@ Attribute = (
     | Boolean_Attribute
     | Cam_Settings_Attribute
     | Stat_Event_Attribute
+    | Demolish_Extended_Attribute
 )
 
 Labeled_Attribute = (
@@ -131,6 +166,7 @@ Labeled_Attribute = (
     | Boolean_Attribute
     | Cam_Settings_Attribute
     | Labeled_Stat_Event_Attribute
+    | Demolish_Extended_Attribute
 )
 
 
@@ -173,3 +209,19 @@ class Raw_Game_Data(TypedDict):
     names: List[str]
     objects: List[str]
     network_frames: Network_Frames
+
+
+JsonPrimitive = str | float | int | bool | None
+JsonLike = Union[
+    JsonPrimitive,
+    "Actor_Export",
+    List["Actor_Export"],
+    Time_Labeled_Rigid_Body_Positioning,
+    List[Time_Labeled_Rigid_Body_Positioning],
+]
+
+Actor_Export = Union[
+    Dict[str, JsonLike],
+    Dict[int, JsonLike],
+    Dict[int, List[Time_Labeled_Rigid_Body_Positioning]],
+]

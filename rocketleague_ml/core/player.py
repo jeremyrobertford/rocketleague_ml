@@ -1,6 +1,6 @@
 from typing import List, cast
 from rocketleague_ml.utils.helpers import convert_byte_to_float
-from rocketleague_ml.types.attributes import String_Attribute
+from rocketleague_ml.types.attributes import String_Attribute, Actor_Export
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.car import Car
 from rocketleague_ml.core.camera_settings import CameraSettings
@@ -90,3 +90,16 @@ class Player(Actor):
                 self.steering_sensitivity = player_component.amount
             elif player_component.object == "TAGame.PRI_TA:MatchScore":
                 self.score = int(player_component.amount)
+
+    def to_dict(self):
+        base_player = super().to_dict()
+        player: Actor_Export = {
+            "name": self.name,
+            "car": self.car.to_dict() if self.car else None,
+            "steering_sensitivity": self.steering_sensitivity,
+            "score": self.score,
+            "camera_settings": (
+                self.camera_settings.to_dict() if self.camera_settings else None
+            ),
+        }
+        return cast(Actor_Export, base_player | player)

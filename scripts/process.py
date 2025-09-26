@@ -5,8 +5,9 @@ Preprocess script: call rrrocket on raw replays and save JSON to data/processed/
 
 import os
 import argparse
-from pathlib import Path
 import pickle
+import json
+from pathlib import Path
 
 from rocketleague_ml.data.loader import load_preprocessed_replay
 from rocketleague_ml.models.process import process_game
@@ -29,7 +30,7 @@ def main():
     parser.add_argument(
         "--output",
         "-o",
-        default=os.path.join(PROCESSED, "pkl"),
+        default=PROCESSED,
         help="Folder to write processed pickle files",
     )
     parser.add_argument(
@@ -53,19 +54,27 @@ def main():
     for fname in replay_files:
         in_path = os.path.join(in_dir, fname)
         base = os.path.splitext(fname)[0]
-        out_path = os.path.join(out_dir, f"{base}.pkl")
+        out_path_pkl = os.path.join(out_dir, "pkl", f"{base}.pkl")
+        out_path_json = os.path.join(out_dir, "json", f"{base}.json")
 
         replay_json = None
 
-        if os.path.exists(out_path) and not args.overwrite:
+        if (
+            os.path.exists(out_path_pkl)
+            and os.path.exists(out_path_json)
+            and not args.overwrite
+        ):
             print(f"Skipping existing analysis for {fname}")
         else:
-            print(f"Parsing {fname} -> {out_path} ...", end=" ", flush=True)
+            print(f"Parsing {fname} -> {out_dir} ...", end=" ", flush=True)
             try:
                 replay_json = load_preprocessed_replay(in_path)
                 game = process_game(replay_json)
-                with open(out_path, "wb") as fh:
-                    pickle.dump(game, fh)
+                game_json = game.to_dict()
+                with open(out_path_json, "w+") as f:
+                    json.dump(game_json, f, indent=4)
+                with open(out_path_pkl, "wb+") as f:
+                    pickle.dump(game, f)
                 print("OK")
                 succeeded += 1
             except Exception as e:

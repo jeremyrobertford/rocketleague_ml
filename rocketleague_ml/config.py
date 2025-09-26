@@ -73,4 +73,5 @@ LABELS = {
     "Engine.Pawn:PlayerReplicationInfo": "car_to_player",
     "TAGame.RBActor_TA:ReplicatedRBState": "rigid_body",
     "TAGame.CameraSettingsActor_TA:PRI": "settings_to_player",
+    "TAGame.Car_TA:ReplicatedDemolishExtended": "player_demod",
 }

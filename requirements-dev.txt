@@ -1,3 +1,5 @@
 black>=23.0
 mypy
 pytest
+ipykernel
+matplotlib

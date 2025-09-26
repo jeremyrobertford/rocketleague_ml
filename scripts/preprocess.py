@@ -63,14 +63,14 @@ def main():
 
         if os.path.exists(out_path) and not args.overwrite:
             print(f"Using existing JSON for {fname}")
-            with open(out_path, "r", encoding="utf-8") as fh:
-                replay_json = json.load(fh)
+            with open(out_path, "r", encoding="utf-8") as f:
+                replay_json = json.load(f)
         else:
             print(f"Parsing {fname} -> {out_path} ...", end=" ", flush=True)
             try:
                 replay_json = load_replay(in_path, rrrocket_path=args.bin_path)
-                with open(out_path, "w", encoding="utf-8") as fh:
-                    json.dump(replay_json, fh, indent=2, ensure_ascii=False)
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(replay_json, f, indent=2, ensure_ascii=False)
                 print("OK")
                 succeeded += 1
             except Exception as e:

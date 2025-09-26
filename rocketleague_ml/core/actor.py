@@ -7,6 +7,7 @@ from rocketleague_ml.config import (
     PLAYER_COMPONENT_LABELS,
 )
 from rocketleague_ml.types.attributes import (
+    Actor_Export,
     Labeled_Attribute,
     Labeled_Stat_Event,
     Labeled_Stat_Event_Attribute,
@@ -142,3 +143,9 @@ class Actor:
             time_labeled_positioning["time"] = frame["time"]
             time_labeled_positioning["delta"] = frame["delta"]
             self.updates_by_round[round].append(time_labeled_positioning)
+
+    def to_dict(self) -> Actor_Export:
+        return {
+            "actor_id": self.actor_id,
+            "updates_by_round": self.updates_by_round,
+        }
