@@ -133,15 +133,6 @@ class Game:
             Actor.label(a, self.objects) for a in frame["updated_actors"]
         ]
 
-        if frame["time"] > 41.8 and frame["time"] < 43:
-            print(2)
-
-        if frame["time"] > 44.4 and frame["time"] < 45:
-            print(3)
-
-        if frame_index == 784:
-            print(3)
-
         events: List[Actor] = []
 
         new_cars: Dict[int, Car] = {}
@@ -185,8 +176,6 @@ class Game:
                     self.activate_game(frame)
                 elif name == "PostGoalScored":
                     self.deactivate_game(frame)
-                else:
-                    print(name)
                 continue
 
         for p in new_cars_for_players:
@@ -207,8 +196,6 @@ class Game:
                 if car_component.actor_id in new_components_for_cars:
                     active_actor_id = new_components_for_cars[car_component.actor_id]
                     car_component.active_actor_id = active_actor_id
-                else:
-                    print(1)
             player.car.assign_components(new_car_components)
 
         for updated_actor in updated_actors:

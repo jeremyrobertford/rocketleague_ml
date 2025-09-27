@@ -10,7 +10,7 @@ from pathlib import Path
 
 from rocketleague_ml.data.loader import load_preprocessed_replay
 from rocketleague_ml.models.process import process_game
-from rocketleague_ml.config import RAW_REPLAYS, PROCESSED
+from rocketleague_ml.config import PREPROCESSED, PROCESSED
 
 
 def ensure_dir(p: str):
@@ -24,18 +24,18 @@ def is_json_file(fname: str):
 def main():
     parser = argparse.ArgumentParser(description="Parse replay JSON files.")
     parser.add_argument(
-        "--input", "-i", default=RAW_REPLAYS, help="Folder with replay JSON files"
+        "--input", "-i", default=PREPROCESSED, help="Folder with replay JSON files"
     )
     parser.add_argument(
         "--output",
         "-o",
         default=PROCESSED,
-        help="Folder to write processed pickle files",
+        help="Folder to write processed pickle and JSON files",
     )
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Force re-run analysis even if it was already done",
+        help="Force re-run game processing even if it was already done",
     )
     args = parser.parse_args()
 
@@ -53,8 +53,8 @@ def main():
     for fname in replay_files:
         in_path = os.path.join(in_dir, fname)
         base = os.path.splitext(fname)[0]
-        out_path_pkl = os.path.join(out_dir, "pkl", f"{base}.pkl")
-        out_path_json = os.path.join(out_dir, "json", f"{base}.json")
+        out_path_pkl = os.path.join(out_dir, f"{base}.pkl")
+        out_path_json = os.path.join(out_dir, f"{base}.json")
 
         replay_json = None
 
@@ -84,7 +84,7 @@ def main():
 
     print()
     print(f"Done. succeeded={succeeded}, failed={failed}")
-    print(f"Saved processed pickles to: {out_dir}")
+    print(f"Saved processed games to: {out_dir}")
 
 
 if __name__ == "__main__":

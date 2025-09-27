@@ -242,7 +242,7 @@ def extract_features_from_game_for_player(game: Game, player_name: str):
             break
 
     if not main_player:
-        raise ValueError("Could not find player {player_name}")
+        raise ValueError(f"Could not find player {player_name}")
 
     for player in game.players.values():
         if player.name == player_name:

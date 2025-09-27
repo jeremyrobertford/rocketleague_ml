@@ -21,7 +21,7 @@ def is_replay_file(fname: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Parse .replay files with rrrocket and/or process JSON."
+        description="Parse .replay files with rrrocket into JSON."
     )
     parser.add_argument(
         "--input", "-i", default=RAW_REPLAYS, help="Folder with .replay files"
@@ -29,7 +29,7 @@ def main():
     parser.add_argument(
         "--output",
         "-o",
-        default=os.path.join(PREPROCESSED, "json"),
+        default=PREPROCESSED,
         help="Folder to write rrrocket JSON files",
     )
     parser.add_argument(
@@ -52,6 +52,7 @@ def main():
         return
 
     succeeded = 0
+    skipped = 0
     failed = 0
     for fname in replay_files:
         in_path = os.path.join(in_dir, fname)
@@ -68,10 +69,14 @@ def main():
             print(f"Parsing {fname} -> {out_path} ...", end=" ", flush=True)
             try:
                 replay_json = load_replay(in_path, rrrocket_path=args.bin_path)
-                with open(out_path, "w", encoding="utf-8") as f:
-                    json.dump(replay_json, f, indent=2, ensure_ascii=False)
-                print("OK")
-                succeeded += 1
+                if replay_json["properties"]["TeamSize"] == 3:
+                    with open(out_path, "w", encoding="utf-8") as f:
+                        json.dump(replay_json, f, indent=2, ensure_ascii=False)
+                    print("OK")
+                    succeeded += 1
+                else:
+                    print("SKIPPED")
+                    skipped += 1
             except Exception as e:
                 print("FAILED")
                 print(f"  {type(e).__name__}: {e}")
@@ -79,7 +84,7 @@ def main():
                 continue  # skip analysis if parsing failed
 
     print()
-    print(f"Done. succeeded={succeeded}, failed={failed}")
+    print(f"Done. succeeded={succeeded}, skipped={skipped}, failed={failed}")
     print(f"Saved JSON to: {out_dir}")
 
 

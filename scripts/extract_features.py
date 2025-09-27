@@ -8,7 +8,7 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Dict
 from rocketleague_ml.data.loader import load_processed_game
-from rocketleague_ml.config import RAW_REPLAYS, FEATURES
+from rocketleague_ml.config import PROCESSED, FEATURES
 from rocketleague_ml.models.extract import extract_features_from_game_for_player
 
 
@@ -25,7 +25,7 @@ def main():
         description="Extract features from .pkl game files."
     )
     parser.add_argument(
-        "--input", "-i", default=RAW_REPLAYS, help="Folder with .pkl game files"
+        "--input", "-i", default=PROCESSED, help="Folder with .pkl game files"
     )
     parser.add_argument(
         "--output",
@@ -59,12 +59,13 @@ def main():
     if os.path.exists(out_path) and not args.overwrite:
         print(f"Skipping extracted features already present in {base_file_name}")
     else:
-        print(f"Extract to {base_file_name} -> {out_dir} ...", end=" ", flush=True)
+        print(f"Extract to {base_file_name} -> {out_dir} ...")
         for fname in replay_files:
+            print(f"Extract {fname} ...", end=" ", flush=True)
             in_path = os.path.join(in_dir, fname)
             try:
                 game = load_processed_game(in_path)
-                features = extract_features_from_game_for_player(game, "Gyhl")
+                features = extract_features_from_game_for_player(game, "RL_LionHeart")
                 all_features = all_features + features
                 print("OK")
                 succeeded += 1
