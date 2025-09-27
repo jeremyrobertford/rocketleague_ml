@@ -195,6 +195,7 @@ class Labeled_Raw_Actor(TypedDict):
 class Raw_Frame(TypedDict):
     time: float
     delta: float
+    active: bool | None
     new_actors: List[Raw_Actor]
     deleted_actors: List[int]
     updated_actors: List[Raw_Actor]

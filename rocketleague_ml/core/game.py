@@ -118,11 +118,7 @@ class Game:
         self.active = False
         self.rounds[self.round]["end_time"] = frame["time"]
 
-    def resync(self, frame: Raw_Frame):
-        self.last_frame = frame
-        return
-
-    def analyze_frame(self, frame: Raw_Frame, frame_index: int | None = None):
+    def analyze_frame(self, frame: Raw_Frame, frame_index: int):
         resync_frame = len(frame["new_actors"]) + len(frame["updated_actors"]) > 80
         labeled_new_actors = [  # pyright: ignore[reportUnusedVariable]
             Actor.label(a, self.objects) for a in frame["new_actors"]
@@ -289,6 +285,9 @@ class Game:
                     updated_actor.raw, updated_actor.objects
                 )
 
+        if self.last_frame:
+            self.last_frame["active"] = self.active
+            self.frames[frame_index - 1] = self.last_frame
         self.last_frame = frame
         return
 
