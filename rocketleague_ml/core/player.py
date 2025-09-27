@@ -31,7 +31,8 @@ class Player(Actor):
         super().__init__(player.raw, player.objects)
         attribute = cast(String_Attribute, player.raw["attribute"])
         self.name = attribute["String"]
-        self.car = None
+        self.car: Car | None = None
+        self.team: str | None = None
         self.steering_sensitivity: float | None = None
         self.score: int = 0
         self.camera_settings: CameraSettings | None = None
@@ -45,6 +46,20 @@ class Player(Actor):
             for car in cars:
                 if car.is_self(connection):
                     self.car = car
+                    break
+
+    def assign_team(
+        self,
+        teams: List[Player_Component],
+        player_team_connections: List[Player_Component],
+    ):
+        for connection in player_team_connections:
+            if not self.is_self(connection):
+                continue
+
+            for team in teams:
+                if team.owns(connection):
+                    self.team = team.secondary_category
                     break
 
     def assign_camera_settings(

@@ -206,10 +206,15 @@ class Network_Frames(TypedDict):
     frames: List[Raw_Frame]
 
 
+class Raw_Game_Properties(TypedDict):
+    Id: str
+
+
 class Raw_Game_Data(TypedDict):
     names: List[str]
     objects: List[str]
     network_frames: Network_Frames
+    properties: Raw_Game_Properties
 
 
 JsonPrimitive = str | float | int | bool | None

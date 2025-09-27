@@ -6,6 +6,7 @@ DATA_DIR = os.path.join(BASE_DIR, "..", "data")
 RAW_REPLAYS = os.path.join(DATA_DIR, "raw")
 PREPROCESSED = os.path.join(DATA_DIR, "preprocessed")
 PROCESSED = os.path.join(DATA_DIR, "processed")
+FEATURES = os.path.join(DATA_DIR, "features")
 
 # Training configs
 RANDOM_SEED = 42
@@ -46,8 +47,9 @@ CAR_COMPONENT_LABELS = {
 }
 PLAYER_COMPONENT_LABELS = {
     "TAGame.Default__PRI_TA": "",
-    "Archetypes.Teams.Team0": "team",
-    "Archetypes.Teams.Team1": "team",
+    "Engine.PlayerReplicationInfo:Team": "team",
+    "Archetypes.Teams.Team0": "Blue",
+    "Archetypes.Teams.Team1": "Orange",
     "TAGame.PRI_TA:SteeringSensitivity": "steering_sensitivity",
     "TAGame.PRI_TA:MatchScore": "score",
 }
@@ -75,3 +77,13 @@ LABELS = {
     "TAGame.CameraSettingsActor_TA:PRI": "settings_to_player",
     "TAGame.Car_TA:ReplicatedDemolishExtended": "player_demod",
 }
+
+Z_GROUND = 30
+Z_CEILING = 2000
+X_WALL = 4096
+Y_WALL = 5120
+X_GOAL = 892
+GOAL_DEPTH = 880
+TOL = 50
+FIELD_X = [-4096, 4096, 4096, -4096, -4096]
+FIELD_Y = [-5120, -5120, 5120, 5120, -5120]

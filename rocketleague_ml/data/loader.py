@@ -5,12 +5,14 @@ Shells out to the rrrocket binary and returns parsed JSON.
 
 import subprocess
 import json
+import pickle
 import os
 import shutil
 from typing import cast
 
 from rocketleague_ml.config import BASE_DIR
 from rocketleague_ml.types.attributes import Raw_Game_Data
+from rocketleague_ml.core.game import Game
 
 # Default location in the repo
 DEFAULT_BIN_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "bin"))
@@ -95,7 +97,7 @@ def load_preprocessed_replay(file_path: str):
     Parameters
     ----------
     file_path : str
-        Path to the .replay file.
+        Path to the preprocessed JSON file.
 
     Returns
     -------
@@ -103,7 +105,6 @@ def load_preprocessed_replay(file_path: str):
         Parsed JSON output from rrrocket.
     """
 
-    # parse stdout as JSON
     try:
         with open(file_path, "r") as f:
             replay_json = json.load(f)
@@ -112,3 +113,26 @@ def load_preprocessed_replay(file_path: str):
         raise ValueError(
             f"Failed to parse JSON from rrrocket for {file_path}: {e}"
         ) from e
+
+
+def load_processed_game(file_path: str):
+    """
+    Load processed .pkl game as a Game class.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the .pkl game file.
+
+    Returns
+    -------
+    Game
+        Parsed game output from .pkl file.
+    """
+
+    try:
+        with open(file_path, "rb") as f:
+            game = pickle.load(f)
+            return cast(Game, game)
+    except pickle.PickleError as e:
+        raise ValueError(f"Failed to parse .pkl for {file_path}: {e}") from e

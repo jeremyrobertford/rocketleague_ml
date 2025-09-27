@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """
-Preprocess script: call rrrocket on raw replays and save JSON to data/processed/json/
+Process script: convert preprocessed games into pkl objects for feature extraction
 """
 
 import os

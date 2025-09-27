@@ -14,6 +14,7 @@ from rocketleague_ml.core.player import Player, Player_Component
 class Game:
 
     def __init__(self, game_data: Raw_Game_Data):
+        self.id = game_data["properties"]["Id"]
         self.names = {i: obj for i, obj in enumerate(game_data["names"])}
         self.objects = {i: obj for i, obj in enumerate(game_data["objects"])}
         self.initial_frame = game_data["network_frames"]["frames"][0]
@@ -34,6 +35,7 @@ class Game:
 
         cars: List[Car] = []
         car_components: List[Car_Component] = []
+        teams: List[Player_Component] = []
 
         for na in new_actors:
             new_actor = Actor(na, self.objects)
@@ -45,6 +47,9 @@ class Game:
                 continue
             if new_actor.category == "car_component":
                 car_components.append(Car_Component(new_actor))
+                continue
+            if new_actor.category == "player_component":
+                teams.append(Player_Component(new_actor))
 
         players: List[Actor] = []
         cars_to_players: List[Actor] = []
@@ -93,6 +98,7 @@ class Game:
         for p in players:
             player = Player(p)
             player.assign_car(cars, cars_to_players)
+            player.assign_team(teams, player_components)
             player.assign_camera_settings(camera_settings, settings_to_players)
             player.update_components(player_components)
             self.players[player.actor_id] = player
