@@ -40,6 +40,20 @@ class Time_Labeled_Rigid_Body_Positioning(Rigid_Body_Positioning):
     delta: float
 
 
+class Time_Labeled_Activity(TypedDict):
+    round: int
+    time: float
+    delta: float
+    active: bool
+
+
+class Time_Labeled_Amount(TypedDict):
+    round: int
+    time: float
+    delta: float
+    amount: float
+
+
 class Time_Labeled_Attacker_Demo(TypedDict):
     round: int
     time: float

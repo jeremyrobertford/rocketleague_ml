@@ -40,6 +40,7 @@ CAR_COMPONENT_LABELS = {
     "TAGame.Vehicle_TA:ReplicatedSteer": "steer",
     "TAGame.Vehicle_TA:ReplicatedThrottle": "throttle",
     "TAGame.Vehicle_TA:ReplicatedHandbrake": "handbrake",
+    "TAGame.Vehicle_TA:bReplicatedHandbrake": "handbrake_active",
     "TAGame.Vehicle_TA:ReplicatedJump": "rep_jump",
     "TAGame.Vehicle_TA:ReplicatedDodge": "rep_dodge",
     "TAGame.Vehicle_TA:ReplicatedBoost": "rep_boost",

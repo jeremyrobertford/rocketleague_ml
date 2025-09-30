@@ -132,7 +132,7 @@ class Actor:
             raise ValueError(
                 "Positoning not found when updating position for {self.actor_id}: {updated_actor.raw}"
             )
-        self.position = updated_actor.positioning.copy()
+        self.positioning = updated_actor.positioning.copy()
         if active_game:
             if round not in self.updates_by_round:
                 self.updates_by_round[round] = []

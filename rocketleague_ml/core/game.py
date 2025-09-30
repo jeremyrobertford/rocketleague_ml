@@ -19,8 +19,6 @@ class Game:
         self.objects = {i: obj for i, obj in enumerate(game_data["objects"])}
         self.initial_frame = game_data["network_frames"]["frames"][0]
         self.frames = game_data["network_frames"]["frames"][1:]
-        self.debug: List[Any] = []
-        self.debug_dict: Dict[int, Any] = {}
         self.last_frame: Raw_Frame | None = self.initial_frame
         self.active = False
         self.round = 0
@@ -93,7 +91,9 @@ class Game:
 
         for car in cars:
             car.assign_components(car_components)
-            car.update_components(secondary_car_components)
+            car.update_components(
+                secondary_car_components, self.active, self.initial_frame, self.round
+            )
 
         for p in players:
             player = Player(p)
@@ -123,6 +123,50 @@ class Game:
     def deactivate_game(self, frame: Raw_Frame):
         self.active = False
         self.rounds[self.round]["end_time"] = frame["time"]
+
+    def update_actor_position(self, updated_actor: Actor, frame: Raw_Frame):
+        if self.ball and self.ball.actor_id == updated_actor.actor_id:
+            self.ball.update_position(updated_actor, self.active, frame, self.round)
+            return True
+        for player in self.players.values():
+            car = player.car
+            if not car:
+                return True
+            if car.actor_id == updated_actor.actor_id:
+                car.update_position(updated_actor, self.active, frame, self.round)
+                return True
+            if car.boost and car.boost.actor_id == updated_actor.actor_id:
+                car.boost.update_position(updated_actor, self.active, frame, self.round)
+                return True
+            if car.jump and car.jump.actor_id == updated_actor.actor_id:
+                car.jump.update_position(updated_actor, self.active, frame, self.round)
+                return True
+            if car.dodge and car.dodge.actor_id == updated_actor.actor_id:
+                car.dodge.update_position(updated_actor, self.active, frame, self.round)
+                return True
+            if car.flip and car.flip.actor_id == updated_actor.actor_id:
+                car.flip.update_position(updated_actor, self.active, frame, self.round)
+                return True
+            if car.double_jump and car.double_jump.actor_id == updated_actor.actor_id:
+                car.double_jump.update_position(
+                    updated_actor, self.active, frame, self.round
+                )
+                return True
+        return False
+
+    def update_actor_activity(self, updated_actor: Actor, frame: Raw_Frame):
+        if updated_actor.category == "car_compnonent":
+            for player in self.players.values():
+                car = player.car
+                if car and (car.is_self(updated_actor) or car.owns(updated_actor)):
+                    car.update_components(
+                        [Car_Component(updated_actor)],
+                        self.active,
+                        frame,
+                        self.round,
+                    )
+                    return True
+        return False
 
     def analyze_frame(self, frame: Raw_Frame, frame_index: int):
         resync_frame = len(frame["new_actors"]) + len(frame["updated_actors"]) > 80
@@ -201,62 +245,43 @@ class Game:
         for updated_actor in updated_actors:
             if updated_actor.actor_id == 8:
                 events.append(updated_actor)
+                continue
+
             attribute = updated_actor.raw.get("attribute")
             if not attribute:
                 continue
 
-            active_actor = attribute.get("ActiveActor")
-            if (
-                active_actor
-                and active_actor["actor"] == 31
-                and updated_actor.category == "car_to_player"
-            ):
-                self.debug.append(updated_actor)
+            if frame_index >= 245:
+                pass
+
+            if updated_actor.actor_id == 52 or updated_actor.active_actor_id == 52:
+                pass
+
+            activated_actor = attribute.get("Boolean")
+            if activated_actor is not None:
+                changed = self.update_actor_activity(updated_actor, frame)
+                if changed:
+                    continue
 
             rigid_body = attribute.get("RigidBody")
             if rigid_body:
-                if self.ball and self.ball.actor_id == updated_actor.actor_id:
-                    self.ball.update_position(
-                        updated_actor, self.active, frame, self.round
-                    )
+                changed = self.update_actor_position(updated_actor, frame)
+                if changed:
                     continue
+
+            if updated_actor.category == "car_component":
                 for player in self.players.values():
-                    car = player.car
-                    if not car:
+                    if not player.car:
                         continue
-                    if car.actor_id == updated_actor.actor_id:
-                        car.update_position(
-                            updated_actor, self.active, frame, self.round
-                        )
-                        continue
-                    if car.boost and car.boost.actor_id == updated_actor.actor_id:
-                        car.boost.update_position(
-                            updated_actor, self.active, frame, self.round
-                        )
-                        continue
-                    if car.jump and car.jump.actor_id == updated_actor.actor_id:
-                        car.jump.update_position(
-                            updated_actor, self.active, frame, self.round
-                        )
-                        continue
-                    if car.dodge and car.dodge.actor_id == updated_actor.actor_id:
-                        car.dodge.update_position(
-                            updated_actor, self.active, frame, self.round
-                        )
-                        continue
-                    if car.flip and car.flip.actor_id == updated_actor.actor_id:
-                        car.flip.update_position(
-                            updated_actor, self.active, frame, self.round
-                        )
-                        continue
-                    if (
-                        car.double_jump
-                        and car.double_jump.actor_id == updated_actor.actor_id
+                    if player.car.owns(updated_actor) or player.car.is_self(
+                        updated_actor
                     ):
-                        car.double_jump.update_position(
-                            updated_actor, self.active, frame, self.round
+                        player.car.update_components(
+                            [Car_Component(updated_actor)],
+                            self.active,
+                            frame,
+                            self.round,
                         )
-                        continue
 
             demolition: Demolition_Attribute | None = attribute.get("DemolishExtended")
             if demolition:
@@ -272,11 +297,6 @@ class Game:
                 if attacker_car and victim_car:
                     attacker_car.demo(victim_car, updated_actor, frame, self.round)
                     continue
-
-            if updated_actor.actor_id not in self.debug_dict:
-                self.debug_dict[updated_actor.actor_id] = Actor.label(
-                    updated_actor.raw, updated_actor.objects
-                )
 
         if self.last_frame:
             self.last_frame["active"] = self.active
