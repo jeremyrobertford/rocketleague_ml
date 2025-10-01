@@ -29,6 +29,7 @@ def extract_base_features(
         {
             "time": [frame["time"] for frame in game.frames],
             "delta": [frame["delta"] for frame in game.frames],
+            "match_time": [frame["match_time"] for frame in game.frames],
             "active": [frame["active"] or False for frame in game.frames],
         }
     )
@@ -66,10 +67,27 @@ def extract_base_features(
                     (-1 if config["flip_x"] else 1) * u["location"]["x"],
                     (-1 if config["flip_y"] else 1) * u["location"]["y"],
                     u["location"]["z"],
+                    (-1 if config["flip_y"] else 1) * u["rotation"]["x"],
+                    (-1 if config["flip_y"] else 1) * u["rotation"]["y"],
+                    (-1 if config["flip_y"] else 1) * u["rotation"]["z"],
+                    u["rotation"]["w"],
                 )
                 for u in player.car.updates_by_round[round]
             }
-        ).T.rename(columns={0: f"{prefix}x", 1: f"{prefix}y", 2: f"{prefix}z"})
+        ).T.rename(
+            columns={
+                0: f"{prefix}x",
+                1: f"{prefix}y",
+                2: f"{prefix}z",
+                3: f"{prefix}rotation_x",
+                4: f"{prefix}rotation_y",
+                5: f"{prefix}rotation_z",
+                6: f"{prefix}rotation_w",
+            }
+        )
+
+        if round == 4:
+            pass
 
         player_ser = player_ser.reindex(dense.index, method="ffill")
         for col in player_ser.columns:
@@ -94,6 +112,7 @@ def extract_base_features(
 
     # slice the DataFrame to keep only that range
     dense = dense.loc[first_valid:last_valid].reset_index(drop=True)
+    dense.set_index("time", drop=False, inplace=True)
 
     # now you can ffill/bfill safely
     dense = dense.ffill().bfill()
@@ -232,6 +251,168 @@ def get_position_stats_for(cols: Union[str, List[str]], features: pd.DataFrame):
     return perc_in_position, avg_stint
 
 
+def extract_velocity_features(
+    features: pd.DataFrame,
+    game: Game,
+    round: int,
+    main_player: Player,
+    config: Dict[str, Any],
+):
+    if not game.ball:
+        raise ValueError(f"Game does not contain ball {game.id}")
+
+    # --- ball ---
+    ball_ser = pd.DataFrame(
+        {
+            u["time"]: (
+                (
+                    (-1 if config["flip_x"] else 1) * u["linear_velocity"]["x"]
+                    if u["linear_velocity"]
+                    else 0
+                ),
+                (
+                    (-1 if config["flip_y"] else 1) * u["linear_velocity"]["y"]
+                    if u["linear_velocity"]
+                    else 0
+                ),
+                (u["linear_velocity"]["z"] if u["linear_velocity"] else 0),
+                (
+                    (-1 if config["flip_x"] else 1) * u["angular_velocity"]["x"]
+                    if u["angular_velocity"]
+                    else 0
+                ),
+                (
+                    (-1 if config["flip_y"] else 1) * u["angular_velocity"]["y"]
+                    if u["angular_velocity"]
+                    else 0
+                ),
+                (u["angular_velocity"]["z"] if u["angular_velocity"] else 0),
+            )
+            for u in game.ball.updates_by_round[round]
+        }
+    ).T.rename(
+        columns={
+            0: "ball_linear_velocity_x",
+            1: "ball_linear_velocity_y",
+            2: "ball_linear_velocity_z",
+            3: "ball_angular_velocity_x",
+            4: "ball_angular_velocity_y",
+            5: "ball_angular_velocity_z",
+        }
+    )
+
+    # reindex onto master frame list
+    ball_ser = ball_ser.reindex(features.index, method="ffill")
+    for col in ball_ser.columns:
+        features[col] = ball_ser[col]
+
+    # --- players ---
+    for player in game.players.values():
+        if not player.car:
+            raise ValueError(
+                f"No player car for player {player.name} in game {game.id}"
+            )
+        prefix = player.name + "_"
+        if player.name == main_player.name:
+            prefix = ""
+        player_ser = pd.DataFrame(
+            {
+                u["time"]: (
+                    (
+                        (-1 if config["flip_x"] else 1) * u["linear_velocity"]["x"]
+                        if u["linear_velocity"]
+                        else 0
+                    ),
+                    (
+                        (-1 if config["flip_y"] else 1) * u["linear_velocity"]["y"]
+                        if u["linear_velocity"]
+                        else 0
+                    ),
+                    (u["linear_velocity"]["z"] if u["linear_velocity"] else 0),
+                    (
+                        (-1 if config["flip_x"] else 1) * u["angular_velocity"]["x"]
+                        if u["angular_velocity"]
+                        else 0
+                    ),
+                    (
+                        (-1 if config["flip_y"] else 1) * u["angular_velocity"]["y"]
+                        if u["angular_velocity"]
+                        else 0
+                    ),
+                    (u["angular_velocity"]["z"] if u["angular_velocity"] else 0),
+                )
+                for u in player.car.updates_by_round[round]
+            }
+        ).T.rename(
+            columns={
+                0: f"{prefix}linear_velocity_x",
+                1: f"{prefix}linear_velocity_y",
+                2: f"{prefix}linear_velocity_z",
+                3: f"{prefix}angular_velocity_x",
+                4: f"{prefix}angular_velocity_y",
+                5: f"{prefix}angular_velocity_z",
+            }
+        )
+
+        player_ser = player_ser.reindex(features.index, method="ffill")
+        for col in player_ser.columns:
+            features[col] = player_ser[col]
+
+    return features
+
+
+def extract_speed_features(
+    features: pd.DataFrame, game: Game, main_player: Player, config: Dict[str, Any]
+):
+    features["linear_velocity"] = np.sqrt(
+        (features["linear_velocity_x"]) ** 2
+        + (features["linear_velocity_y"]) ** 2
+        + (features["linear_velocity_z"]) ** 2
+    )
+
+    features["angular_velocity"] = np.sqrt(
+        (features["angular_velocity_x"]) ** 2
+        + (features["angular_velocity_y"]) ** 2
+        + (features["angular_velocity_z"]) ** 2
+    )
+
+    for player in game.players.values():
+        if player.name == main_player.name:
+            continue
+        features[f"{player.name}_linear_velocity"] = np.sqrt(
+            (features[f"{player.name}_linear_velocity_x"]) ** 2
+            + (features[f"{player.name}_linear_velocity_y"]) ** 2
+            + (features[f"{player.name}_linear_velocity_z"]) ** 2
+        )
+
+        features[f"{player.name}_angular_velocity"] = np.sqrt(
+            (features[f"{player.name}_angular_velocity_x"]) ** 2
+            + (features[f"{player.name}_angular_velocity_y"]) ** 2
+            + (features[f"{player.name}_angular_velocity_z"]) ** 2
+        )
+
+    features["is_still"] = features["linear_velocity"] <= 10
+    features["is_slow"] = features["linear_velocity"] <= 500
+    features["is_semi_slow"] = (features["linear_velocity"] > 500) & (
+        features["linear_velocity"] <= 1000
+    )
+    features["is_medium_speed"] = (features["linear_velocity"] > 1000) & (
+        features["linear_velocity"] <= 1500
+    )
+    features["is_semi_fast"] = (features["linear_velocity"] > 1500) & (
+        features["linear_velocity"] <= 2000
+    )
+    features["is_fast"] = features["linear_velocity"] > 2000
+
+    features["is_drive_speed"] = features["linear_velocity"] <= 1410
+    features["is_boost_speed"] = (features["linear_velocity"] > 1410) & (
+        features["linear_velocity"] < 2200
+    )
+    features["is_supersonic"] = features["linear_velocity"] >= 2200
+
+    return features
+
+
 def extract_features_from_game_for_player(game: Game, player_name: str):
     main_player = None
     teammates: List[str] = []
@@ -252,8 +433,8 @@ def extract_features_from_game_for_player(game: Game, player_name: str):
         else:
             opponents.append(player.name)
 
-    flip_x = True
-    flip_y = True if main_player and main_player.team == "Blue" else False
+    flip_x = True if main_player and main_player.team == "Blue" else False
+    flip_y = True if main_player and main_player.team == "Orange" else False
     config = {
         "flip_x": flip_x,
         "flip_y": flip_y,
@@ -268,8 +449,33 @@ def extract_features_from_game_for_player(game: Game, player_name: str):
             base_features, game, main_player, config
         )
         features = extract_field_pos_features(features, game, main_player, config)
+        features = extract_velocity_features(features, game, round, main_player, config)
+        features = extract_speed_features(features, game, main_player, config)
+
+        debug = features[(features["time"] > 136) & (features["time"] < 146)]
 
         round_summary: Dict[str, float] = {}
+
+        avg_speed = features["linear_velocity"].mean()
+        round_summary["Average Speed"] = avg_speed
+
+        speed_metric_columns = {
+            "Stationary": ["is_still"],
+            "Slow": ["is_slow"],
+            "Semi-Slow": ["is_semi_slow"],
+            "Medium Speed": ["is_slow"],
+            "Semi-Fast": ["is_semi_fast"],
+            "Drive Speed": ["is_drive_speed"],
+            "Boost Speed": ["is_supersonic"],
+            "Supersonic": ["is_supersonic"],
+        }
+        for label, cols in speed_metric_columns.items():
+            perc, avg_stint = get_position_stats_for(cols, features)
+            round_summary[f"Percent Time while {label}"] = perc
+            round_summary[f"Average Stint while {label}"] = avg_stint
+
+        avg_angular_speed = features["angular_velocity"].mean()
+        round_summary["Average Angular Speed"] = avg_angular_speed
 
         avg_distance_to_ball = features["distance_to_ball"].mean()
         round_summary["Average Distance to Ball"] = avg_distance_to_ball

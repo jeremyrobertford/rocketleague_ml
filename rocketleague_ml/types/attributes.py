@@ -30,19 +30,27 @@ class Rigid_Body_Positioning(TypedDict):
     sleeping: bool
     location: Position_Dict
     rotation: Rotation_Dict | Euler_Rotation_Dict
+    previous_linear_velocity: Position_Dict | None
     linear_velocity: Position_Dict | None
     angular_velocity: Position_Dict | None
 
 
-class Time_Labeled_Rigid_Body_Positioning(Rigid_Body_Positioning):
+class Time_Labeled_Rigid_Body_Positioning(TypedDict):
     round: int
     time: float
+    match_time: float
     delta: float
+    sleeping: bool
+    location: Position_Dict
+    rotation: Rotation_Dict
+    linear_velocity: Position_Dict | None
+    angular_velocity: Position_Dict | None
 
 
 class Time_Labeled_Activity(TypedDict):
     round: int
     time: float
+    match_time: float
     delta: float
     active: bool
 
@@ -50,6 +58,7 @@ class Time_Labeled_Activity(TypedDict):
 class Time_Labeled_Amount(TypedDict):
     round: int
     time: float
+    match_time: float
     delta: float
     amount: float
 
@@ -57,19 +66,25 @@ class Time_Labeled_Amount(TypedDict):
 class Time_Labeled_Attacker_Demo(TypedDict):
     round: int
     time: float
+    match_time: float
     delta: float
-    velocity: Position_Dict
+    linear_velocity: Position_Dict
+    collision: Position_Dict
     victim_actor_id: int
-    victim_velocity: Position_Dict
+    victim_linear_velocity: Position_Dict | None
+    victim_collision: Position_Dict
 
 
 class Time_Labeled_Victim_Demo(TypedDict):
     round: int
     time: float
+    match_time: float
     delta: float
-    velocity: Position_Dict
+    linear_velocity: Position_Dict | None
+    collision: Position_Dict
     attacker_actor_id: int
-    attacker_velocity: Position_Dict
+    attacker_linear_velocity: Position_Dict
+    attacker_collision: Position_Dict
 
 
 class Positioning_Dict(Rigid_Body_Positioning):
@@ -208,6 +223,10 @@ class Labeled_Raw_Actor(TypedDict):
 
 class Raw_Frame(TypedDict):
     time: float
+    match_time: float
+    match_time_label: str
+    in_overtime: bool
+    overtime_elapsed: float
     delta: float
     active: bool | None
     new_actors: List[Raw_Actor]

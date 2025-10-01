@@ -1,29 +1,13 @@
 from typing import List, cast
-from rocketleague_ml.utils.helpers import convert_byte_to_float
 from rocketleague_ml.types.attributes import String_Attribute, Actor_Export
 from rocketleague_ml.core.actor import Actor
-from rocketleague_ml.core.car import Car
+from rocketleague_ml.core.car import Car, Car_Component
 from rocketleague_ml.core.camera_settings import CameraSettings
 
 
-class Player_Component(Actor):
-    def __init__(self, car_component: Actor):
-        super().__init__(car_component.raw, car_component.objects)
-        self.amount = 0.0
-
-    def update_amount(self, updated_car_component: Actor):
-        attribute = updated_car_component.raw["attribute"]
-        if not attribute or ("Float" not in attribute and "Byte" not in attribute):
-            raise ValueError("Car component updated without value {car_component.raw}")
-
-        if "Float" in attribute:
-            self.amount = attribute["Float"]
-            return
-        if "Byte" in attribute:
-            self.amount = convert_byte_to_float(attribute["Byte"])
-            return
-
-        raise ValueError("Car component updated with unknown value {car_component.raw}")
+class Player_Component(Car_Component):
+    def __init__(self, player_component: Actor):
+        super().__init__(player_component)
 
 
 class Player(Actor):

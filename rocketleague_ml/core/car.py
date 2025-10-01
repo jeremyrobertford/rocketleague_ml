@@ -47,6 +47,7 @@ class Car_Component(Actor):
                 {
                     "round": round,
                     "time": frame["time"],
+                    "match_time": frame["match_time"],
                     "delta": frame["delta"],
                     "amount": new_amount,
                 }
@@ -79,6 +80,7 @@ class Car_Component(Actor):
                 {
                     "round": round,
                     "time": frame["time"],
+                    "match_time": frame["match_time"],
                     "delta": frame["delta"],
                     "active": active,
                 }
@@ -182,33 +184,64 @@ class Car(Actor):
     def demo(self, victim_car: Car, demo_actor: Actor, frame: Raw_Frame, round: int):
         attribute = demo_actor.raw.get("attribute")
         if not attribute:
-            raise ValueError("Demo occurred without attribute {demo_actor}")
+            raise ValueError(f"Demo occurred without attribute {demo_actor.raw}")
         demolition: Demolition_Attribute | None = attribute.get("DemolishExtended")
         if not demolition:
-            raise ValueError("Demo occurred without demolish {demo_actor}")
-        if self.actor_id == victim_car.actor_id:
-            self.got_demod.append(
-                {
-                    "round": round,
-                    "time": frame["time"],
-                    "delta": frame["delta"],
-                    "velocity": demolition["victim_velocity"],
-                    "attacker_actor_id": demolition["attacker"]["actor"],
-                    "attacker_velocity": demolition["attacker_velocity"],
-                }
+            raise ValueError(f"Demo occurred without demolish {demo_actor.raw}")
+        if not self.positioning or not self.positioning.linear_velocity:
+            raise ValueError(f"Demo occurred without speed {demo_actor.raw}")
+        if not victim_car.positioning:
+            raise ValueError(
+                f"Demo occurred without victim positioning {demo_actor.raw}"
             )
-        else:
-            self.demos.append(
-                {
-                    "round": round,
-                    "time": frame["time"],
-                    "delta": frame["delta"],
-                    "velocity": demolition["attacker_velocity"],
-                    "victim_actor_id": demolition["victim"]["actor"],
-                    "victim_velocity": demolition["victim_velocity"],
-                }
+
+        curr = victim_car.positioning.linear_velocity
+        prev = victim_car.positioning.previous_linear_velocity
+        demod_at = prev if curr is None else curr
+        self.demos.append(
+            {
+                "round": round,
+                "time": frame["time"],
+                "match_time": frame["match_time"],
+                "delta": frame["delta"],
+                "linear_velocity": self.positioning.linear_velocity.to_dict(),
+                "collision": demolition["attacker_velocity"],
+                "victim_actor_id": demolition["victim"]["actor"],
+                "victim_linear_velocity": demod_at.to_dict() if demod_at else None,
+                "victim_collision": demolition["victim_velocity"],
+            }
+        )
+
+    def demod(self, attacker_car: Car, demo_actor: Actor, frame: Raw_Frame, round: int):
+        attribute = demo_actor.raw.get("attribute")
+        if not attribute:
+            raise ValueError(f"Demod occurred without attribute {demo_actor.raw}")
+        demolition: Demolition_Attribute | None = attribute.get("DemolishExtended")
+        if not demolition:
+            raise ValueError(f"Demod occurred without demolish {demo_actor.raw}")
+        if not self.positioning:
+            raise ValueError(
+                f"Demod occurred without victim positioning {demo_actor.raw}"
             )
-            victim_car.demo(victim_car, demo_actor, frame, round)
+        if not attacker_car.positioning or not attacker_car.positioning.linear_velocity:
+            raise ValueError(f"Demod occurred without attacker speed {demo_actor.raw}")
+
+        curr = self.positioning.linear_velocity
+        prev = self.positioning.previous_linear_velocity
+        demod_at = prev if curr is None else curr
+        self.got_demod.append(
+            {
+                "round": round,
+                "time": frame["time"],
+                "match_time": frame["match_time"],
+                "delta": frame["delta"],
+                "linear_velocity": demod_at.to_dict() if demod_at else None,
+                "collision": demolition["victim_velocity"],
+                "attacker_actor_id": demolition["attacker"]["actor"],
+                "attacker_collision": demolition["attacker_velocity"],
+                "attacker_linear_velocity": attacker_car.positioning.linear_velocity.to_dict(),
+            }
+        )
 
     def to_dict(self):
         base_car = super().to_dict()

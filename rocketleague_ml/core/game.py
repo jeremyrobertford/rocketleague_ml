@@ -1,4 +1,5 @@
 from typing import Dict, List, Any
+from rocketleague_ml.config import ROUND_LENGTH
 from rocketleague_ml.types.attributes import (
     Raw_Game_Data,
     Raw_Frame,
@@ -18,14 +19,19 @@ class Game:
         self.names = {i: obj for i, obj in enumerate(game_data["names"])}
         self.objects = {i: obj for i, obj in enumerate(game_data["objects"])}
         self.initial_frame = game_data["network_frames"]["frames"][0]
-        self.frames = game_data["network_frames"]["frames"][1:]
+        self.frames: List[Raw_Frame] = game_data["network_frames"]["frames"][1:]
         self.last_frame: Raw_Frame | None = self.initial_frame
+        self.active_clock = False
         self.active = False
         self.round = 0
         self.rounds: Dict[int, Any] = {}
         self.ball: Ball | None = None
         self.players: Dict[int, Player] = {}
         self.get_players()
+
+        self.match_time_remaining: float = ROUND_LENGTH
+        self.in_overtime: bool = False
+        self.overtime_elapsed: float = 0.0
 
     def get_players(self):
         new_actors = self.initial_frame["new_actors"]
@@ -122,6 +128,8 @@ class Game:
 
     def deactivate_game(self, frame: Raw_Frame):
         self.active = False
+        self.active_clock = False
+        self.match_time_remaining += 3
         self.rounds[self.round]["end_time"] = frame["time"]
 
     def update_actor_position(self, updated_actor: Actor, frame: Raw_Frame):
@@ -168,6 +176,34 @@ class Game:
                     return True
         return False
 
+    def calculate_match_time(self, frame: Raw_Frame, frame_index: int):
+        if self.active and not self.in_overtime:
+            self.match_time_remaining = max(
+                0.0, self.match_time_remaining - frame["delta"]
+            )
+
+            EPS = 1e-9
+            if self.match_time_remaining <= EPS:
+                self.match_time_remaining = 0.0
+                self.in_overtime = True
+                self.overtime_elapsed = 0.0
+        elif self.active and self.in_overtime:
+            self.overtime_elapsed += frame["delta"]
+
+        if not self.in_overtime:
+            frame["match_time"] = float(self.match_time_remaining)
+            frame["in_overtime"] = False
+            mins, secs = divmod(int(self.match_time_remaining), 60)
+            frame["match_time_label"] = f"{mins}:{secs:02d}"
+        else:
+            frame["match_time"] = -float(self.overtime_elapsed)
+            frame["in_overtime"] = True
+            mins, secs = divmod(int(self.overtime_elapsed), 60)
+            frame["match_time_label"] = f"+{mins}:{secs:02d}"
+
+        self.frames[frame_index] = frame
+        return frame
+
     def analyze_frame(self, frame: Raw_Frame, frame_index: int):
         resync_frame = len(frame["new_actors"]) + len(frame["updated_actors"]) > 80
         labeled_new_actors = [  # pyright: ignore[reportUnusedVariable]
@@ -203,13 +239,16 @@ class Game:
                     updated_actor.actor_id
                 )
                 continue
-            elif updated_actor.category == "vehicle" and updated_actor.active_actor_id:
+
+            if updated_actor.category == "vehicle" and updated_actor.active_actor_id:
                 new_components_for_cars[updated_actor.actor_id] = (
                     updated_actor.active_actor_id
                 )
                 continue
-            else:
-                updated_actors.append(updated_actor)
+
+            if updated_actor.category == "round_countdown_event":
+                self.active_clock = True
+                continue
 
             if updated_actor.category == "game_start_event" and not resync_frame:
                 attribute = updated_actor.raw.get("attribute")
@@ -221,6 +260,13 @@ class Game:
                 elif name == "PostGoalScored":
                     self.deactivate_game(frame)
                 continue
+
+            updated_actors.append(updated_actor)
+
+        if frame_index == 2045:
+            pass
+
+        frame = self.calculate_match_time(frame, frame_index)
 
         for p in new_cars_for_players:
             if p == -1:
@@ -252,6 +298,9 @@ class Game:
                 continue
 
             if frame_index >= 245:
+                pass
+
+            if frame_index >= 889:
                 pass
 
             if updated_actor.actor_id == 52 or updated_actor.active_actor_id == 52:
@@ -296,6 +345,7 @@ class Game:
                         victim_car = player.car
                 if attacker_car and victim_car:
                     attacker_car.demo(victim_car, updated_actor, frame, self.round)
+                    victim_car.demod(attacker_car, updated_actor, frame, self.round)
                     continue
 
         if self.last_frame:

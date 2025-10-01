@@ -120,6 +120,12 @@ class Positioning:
             self.rotation = Rotation(rotation)
 
         self.sleeping = positioning["sleeping"] if "sleeping" in positioning else True
+        self.previous_linear_velocity = (
+            Position(positioning["previous_linear_velocity"])
+            if "previous_linear_velocity" in positioning
+            and positioning["previous_linear_velocity"]
+            else None
+        )
         self.linear_velocity = (
             Position(positioning["linear_velocity"])
             if "linear_velocity" in positioning and positioning["linear_velocity"]
@@ -140,6 +146,11 @@ class Positioning:
         linear_velocity = (
             self.linear_velocity.to_dict() if self.linear_velocity else None
         )
+        previous_linear_velocity = (
+            self.previous_linear_velocity.to_dict()
+            if self.previous_linear_velocity
+            else None
+        )
         angular_velocity = (
             self.angular_velocity.to_dict() if self.angular_velocity else None
         )
@@ -148,5 +159,6 @@ class Positioning:
             "location": location,
             "rotation": rotation,
             "linear_velocity": linear_velocity,
+            "previous_linear_velocity": previous_linear_velocity,
             "angular_velocity": angular_velocity,
         }

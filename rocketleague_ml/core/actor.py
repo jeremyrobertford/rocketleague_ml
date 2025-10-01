@@ -132,6 +132,9 @@ class Actor:
             raise ValueError(
                 "Positoning not found when updating position for {self.actor_id}: {updated_actor.raw}"
             )
+        updated_actor.positioning.previous_linear_velocity = (
+            self.positioning.linear_velocity if self.positioning else None
+        )
         self.positioning = updated_actor.positioning.copy()
         if active_game:
             if round not in self.updates_by_round:
@@ -141,6 +144,7 @@ class Actor:
             )
             time_labeled_positioning["round"] = round
             time_labeled_positioning["time"] = frame["time"]
+            time_labeled_positioning["match_time"] = frame["match_time"]
             time_labeled_positioning["delta"] = frame["delta"]
             self.updates_by_round[round].append(time_labeled_positioning)
 
