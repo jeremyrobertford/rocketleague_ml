@@ -1,5 +1,7 @@
 from __future__ import annotations
 from typing import TypedDict, List, Union, Dict
+from rocketleague_ml.core.car import Car, Car_Component
+from rocketleague_ml.core.actor import Actor
 
 
 class Position_Dict(TypedDict):
@@ -45,6 +47,15 @@ class Time_Labeled_Rigid_Body_Positioning(TypedDict):
     rotation: Rotation_Dict
     linear_velocity: Position_Dict | None
     angular_velocity: Position_Dict | None
+
+
+class Time_Labeled_Boost_Pickup(TypedDict):
+    round: int
+    time: float
+    match_time: float
+    delta: float
+    location: Position_Dict
+    amount: int
 
 
 class Time_Labeled_Activity(TypedDict):
@@ -124,6 +135,10 @@ class Active_Attribute(TypedDict):
     ActiveActor: Active_Actor_Attribute
 
 
+class Location_Attribute(TypedDict):
+    Location: Position_Dict
+
+
 class Camera_Settings_Attribute(TypedDict):
     fov: float
     height: float
@@ -172,6 +187,24 @@ class Demolish_Extended_Attribute(TypedDict):
     DemolishExtended: Demolition_Attribute
 
 
+class Replicated_Boost(TypedDict):
+    grant_count: int
+    boost_amount: int
+
+
+class Replicated_Boost_Attribute(TypedDict):
+    ReplicatedBoost: Replicated_Boost
+
+
+class Boost_Grab_Attribute(TypedDict):
+    instigator: int
+    picked_up: int
+
+
+class Pickup_New_Attribute(TypedDict):
+    PickupNew: Boost_Grab_Attribute
+
+
 Attribute = (
     String_Attribute
     | Float_Attribute
@@ -183,6 +216,9 @@ Attribute = (
     | Cam_Settings_Attribute
     | Stat_Event_Attribute
     | Demolish_Extended_Attribute
+    | Replicated_Boost_Attribute
+    | Location_Attribute
+    | Pickup_New_Attribute
 )
 
 Labeled_Attribute = (
@@ -196,7 +232,21 @@ Labeled_Attribute = (
     | Cam_Settings_Attribute
     | Labeled_Stat_Event_Attribute
     | Demolish_Extended_Attribute
+    | Replicated_Boost_Attribute
+    | Location_Attribute
+    | Pickup_New_Attribute
 )
+
+
+class Categorized_New_Actors(TypedDict):
+    cars: List[Car]
+    car_components: List[Car_Component]
+
+
+class Categorized_Updated_Actors(TypedDict):
+    events: List[Actor]
+    others: List[Actor]
+    cars_for_players: List[Actor]
 
 
 class Raw_Actor(TypedDict):
@@ -222,6 +272,7 @@ class Labeled_Raw_Actor(TypedDict):
 
 
 class Raw_Frame(TypedDict):
+    resync: bool | None
     time: float
     match_time: float
     match_time_label: str

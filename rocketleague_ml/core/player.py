@@ -15,12 +15,16 @@ class Player(Actor):
         super().__init__(player.raw, player.objects)
         attribute = cast(String_Attribute, player.raw["attribute"])
         self.name = attribute["String"]
-        self.car: Car | None = None
+        self._car: Car | None = None
         self.team: str | None = None
         self.steering_sensitivity: float | None = None
         self.score: int = 0
         self.camera_settings: CameraSettings | None = None
         self.components = []
+
+    @property
+    def car(self) -> Car | None:
+        return self._car
 
     def assign_car(self, cars: List[Car], player_car_connections: List[Actor]):
         for connection in player_car_connections:
@@ -28,8 +32,12 @@ class Player(Actor):
                 continue
 
             for car in cars:
-                if car.is_self(connection):
-                    self.car = car
+                if car.is_self(connection) and not self._car:
+                    self._car = car
+                    break
+                if car.is_self(connection) and self._car:
+                    self._car.actor_id = car.actor_id
+                    self._car.update_component_connections()
                     break
 
     def assign_team(
@@ -102,3 +110,12 @@ class Player(Actor):
             ),
         }
         return cast(Actor_Export, base_player | player)
+
+
+class PlayerWithCar(Player):
+    @property
+    def car(self) -> Car:
+        c = super().car
+        if c is None:
+            raise ValueError("Car not assigned")
+        return c

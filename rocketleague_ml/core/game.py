@@ -1,15 +1,19 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, cast
 from rocketleague_ml.config import ROUND_LENGTH
+from rocketleague_ml.utils.helpers import parse_boost_actor_name
 from rocketleague_ml.types.attributes import (
+    Categorized_Updated_Actors,
+    Categorized_New_Actors,
     Raw_Game_Data,
     Raw_Frame,
     Actor_Export,
     Demolition_Attribute,
+    Boost_Grab_Attribute,
 )
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.ball import Ball
-from rocketleague_ml.core.car import Car, Car_Component
-from rocketleague_ml.core.player import Player, Player_Component
+from rocketleague_ml.core.car import Car, Boost_Car_Component, Car_Component
+from rocketleague_ml.core.player import PlayerWithCar, Player, Player_Component
 
 
 class Game:
@@ -26,7 +30,8 @@ class Game:
         self.round = 0
         self.rounds: Dict[int, Any] = {}
         self.ball: Ball | None = None
-        self.players: Dict[int, Player] = {}
+        self.players: Dict[int, PlayerWithCar] = {}
+        self.boost_pads: Dict[int, Actor] = {}
         self.get_players()
 
         self.match_time_remaining: float = ROUND_LENGTH
@@ -79,6 +84,10 @@ class Game:
                 settings_to_players.append(updated_actor)
                 continue
 
+            if updated_actor.secondary_category == "rep_boost":
+                secondary_car_components.append(Boost_Car_Component(updated_actor))
+                continue
+
             if updated_actor.category == "car_component":
                 secondary_car_components.append(Car_Component(updated_actor))
                 continue
@@ -107,7 +116,7 @@ class Game:
             player.assign_team(teams, player_components)
             player.assign_camera_settings(camera_settings, settings_to_players)
             player.update_components(player_components)
-            self.players[player.actor_id] = player
+            self.players[player.actor_id] = PlayerWithCar(player)
 
     def activate_game(self, frame: Raw_Frame):
         self.round += 1
@@ -163,10 +172,10 @@ class Game:
         return False
 
     def update_actor_activity(self, updated_actor: Actor, frame: Raw_Frame):
-        if updated_actor.category == "car_compnonent":
+        if updated_actor.category == "car_component":
             for player in self.players.values():
                 car = player.car
-                if car and (car.is_self(updated_actor) or car.owns(updated_actor)):
+                if car.is_self(updated_actor) or car.owns(updated_actor):
                     car.update_components(
                         [Car_Component(updated_actor)],
                         self.active,
@@ -204,149 +213,209 @@ class Game:
         self.frames[frame_index] = frame
         return frame
 
-    def analyze_frame(self, frame: Raw_Frame, frame_index: int):
-        resync_frame = len(frame["new_actors"]) + len(frame["updated_actors"]) > 80
-        labeled_new_actors = [  # pyright: ignore[reportUnusedVariable]
-            Actor.label(a, self.objects) for a in frame["new_actors"]
-        ]
-        labeled_updated_actors = [  # pyright: ignore[reportUnusedVariable]
-            Actor.label(a, self.objects) for a in frame["updated_actors"]
-        ]
+    def categorize_new_actor(
+        self,
+        new_actor: Actor,
+        frame: Raw_Frame,
+        categorized_actors: Categorized_New_Actors,
+    ):
+        if ".TheWorld:PersistentLevel.VehiclePickup_Boost_TA_" in new_actor.object:
+            self.boost_pads[new_actor.actor_id] = new_actor
+            return
 
-        events: List[Actor] = []
+        if new_actor.category == "car":
+            categorized_actors["cars"].append(Car(new_actor))
+            return
 
-        new_cars: Dict[int, Car] = {}
-        new_car_components: List[Car_Component] = []
+        if new_actor.category == "car_component":
+            categorized_actors["car_components"].append(Car_Component(new_actor))
+            return
+
+        return
+
+    def categorize_new_actors(self, frame: Raw_Frame):
+        categorized_actors: Categorized_New_Actors = {"cars": [], "car_components": []}
         for na in frame["new_actors"]:
             new_actor = Actor(na, self.objects)
-            if new_actor.category == "car":
-                new_cars[new_actor.actor_id] = Car(new_actor)
-                continue
-            if new_actor.category == "car_component":
-                new_car_components.append(Car_Component(new_actor))
-                continue
+            self.categorize_new_actor(new_actor, frame, categorized_actors)
+        return categorized_actors
 
-        updated_actors: List[Actor] = []
-        new_cars_for_players: Dict[int, int] = {}
-        new_components_for_cars: Dict[int, int] = {}
+    def categorize_updated_actor(
+        self,
+        updated_actor: Actor,
+        frame: Raw_Frame,
+        categorized_actors: Categorized_Updated_Actors,
+        new_actors: Categorized_New_Actors,
+    ):
+        if "event" in updated_actor.category:
+            categorized_actors["events"].append(updated_actor)
+            return
+
+        if updated_actor.category == "car_to_player" and updated_actor.active_actor_id:
+            categorized_actors["cars_for_players"].append(updated_actor)
+            return
+
+        if updated_actor.category == "vehicle" and updated_actor.active_actor_id:
+            for car_component in new_actors["car_components"]:
+                if car_component.is_self(updated_actor):
+                    car_component.active_actor_id = updated_actor.active_actor_id
+                    return
+
+        if ".TheWorld:PersistentLevel.VehiclePickup_Boost_TA_" in updated_actor.object:
+            self.boost_pads[updated_actor.actor_id] = updated_actor
+            return
+
+        if updated_actor.category == "game_start_event" and not frame["resync"]:
+            attribute = updated_actor.raw.get("attribute")
+            if not attribute or "Int" not in attribute:
+                raise ValueError("Game active state not valid {updated_actor.raw}")
+            name = self.names[attribute["Int"]]
+            if name == "Active":
+                self.activate_game(frame)
+            elif name == "PostGoalScored":
+                self.deactivate_game(frame)
+            return
+
+        categorized_actors["others"].append(updated_actor)
+        return
+
+    def categorize_updated_actors(
+        self, frame: Raw_Frame, new_actors: Categorized_New_Actors
+    ):
+        categorized_actors: Categorized_Updated_Actors = {
+            "events": [],
+            "others": [],
+            "cars_for_players": [],
+        }
         for ua in frame["updated_actors"]:
             updated_actor = Actor(ua, self.objects)
-            if (
-                updated_actor.category == "car_to_player"
-                and updated_actor.active_actor_id
-            ):
-                new_cars_for_players[updated_actor.active_actor_id] = (
-                    updated_actor.actor_id
+            self.categorize_updated_actor(
+                updated_actor, frame, categorized_actors, new_actors
+            )
+        return categorized_actors
+
+    def process_updated_actor(self, updated_actor: Actor, frame: Raw_Frame):
+        attribute = updated_actor.raw.get("attribute")
+        if not attribute:
+            return
+
+        attribute_key = [*attribute.keys()][0]
+
+        match attribute_key:
+            case "Boolean":
+                self.update_actor_activity(updated_actor, frame)
+                return
+            case "RigidBody":
+                self.update_actor_position(updated_actor, frame)
+                return
+            case "DemolishExtended":
+                demolition = cast(Demolition_Attribute, attribute)
+                attacker_car = None
+                victim_car = None
+                for player in self.players.values():
+                    if demolition["attacker"]["actor"] == player.car.actor_id:
+                        attacker_car = player.car
+                    if demolition["victim"]["actor"] == player.car.actor_id:
+                        victim_car = player.car
+                if not attacker_car:
+                    raise ValueError(
+                        f"No matching attacker car in demo actor {updated_actor.raw}"
+                    )
+                if not victim_car:
+                    raise ValueError(
+                        f"No matching victim car in demo actor {updated_actor.raw}"
+                    )
+                attacker_car.demo(victim_car, updated_actor, frame, self.round)
+                victim_car.demod(attacker_car, updated_actor, frame, self.round)
+            case "PickupNew":
+                boost_grab = cast(Boost_Grab_Attribute, attribute)
+                boost_actor = self.boost_pads[updated_actor.actor_id]
+                if not boost_actor:
+                    raise ValueError(
+                        f"Cannot find boost actor {updated_actor.actor_id}"
+                    )
+                boost_data = parse_boost_actor_name(boost_actor.object)
+                if not boost_data:
+                    raise ValueError(
+                        f"Boost data not found for boost actor {boost_actor.object}"
+                    )
+                for player in self.players.values():
+                    if not player.car.boost:
+                        raise ValueError(
+                            f"No matching player car boost for boost pickup {updated_actor.raw}"
+                        )
+                    if player.car.actor_id == boost_grab["instigator"]:
+                        player.car.boost.pickup(
+                            boost_data, updated_actor, frame, self.round
+                        )
+                        return
+                raise ValueError(
+                    f"Player car boost pickup never updated {updated_actor.raw}"
                 )
-                continue
+            case _:
+                pass
 
-            if updated_actor.category == "vehicle" and updated_actor.active_actor_id:
-                new_components_for_cars[updated_actor.actor_id] = (
-                    updated_actor.active_actor_id
-                )
-                continue
+        match updated_actor.category:
+            case "car_component":
+                for player in self.players.values():
+                    if player.car.owns(updated_actor) or player.car.is_self(
+                        updated_actor
+                    ):
+                        car_component = (
+                            Boost_Car_Component(updated_actor)
+                            if updated_actor.secondary_category == "rep_boost"
+                            else Car_Component(updated_actor)
+                        )
+                        player.car.update_components(
+                            [car_component],
+                            self.active,
+                            frame,
+                            self.round,
+                        )
+                        return
+                raise ValueError(f"Never updated car component {updated_actor.raw}")
+            case "camera_settings":
+                for player in self.players.values():
+                    player.update_camera_settings([updated_actor])
+                return
+            case "player_component":
+                return
+            case "team_ball_hit":
+                self.ball.team_hit(updated_actor, frame, self.round)
+                return
+            case _:
+                pass
 
-            if updated_actor.category == "round_countdown_event":
-                self.active_clock = True
-                continue
+        return
 
-            if updated_actor.category == "game_start_event" and not resync_frame:
-                attribute = updated_actor.raw.get("attribute")
-                if not attribute or "Int" not in attribute:
-                    raise ValueError("Game active state not valid {updated_actor.raw}")
-                name = self.names[attribute["Int"]]
-                if name == "Active":
-                    self.activate_game(frame)
-                elif name == "PostGoalScored":
-                    self.deactivate_game(frame)
-                continue
+    def process_updated_actors(self, updated_actors: List[Actor], frame: Raw_Frame):
+        for updated_actor in updated_actors:
+            self.process_updated_actor(updated_actor, frame)
 
-            updated_actors.append(updated_actor)
+    def analyze_frame(self, frame: Raw_Frame, frame_index: int):
+        resync_frame = len(frame["new_actors"]) + len(frame["updated_actors"]) > 80
+        if resync_frame:
+            frame["resync"] = True
+
+        categorized_new_actors = self.categorize_new_actors(frame)
+        categorized_updated_actors = self.categorize_updated_actors(
+            frame, categorized_new_actors
+        )
 
         if frame_index == 2045:
             pass
 
         frame = self.calculate_match_time(frame, frame_index)
 
-        for p in new_cars_for_players:
-            if p == -1:
-                continue
-            player = self.players[p]
-            car_actor_id = new_cars_for_players[p]
-            if not car_actor_id or len(new_cars) == 0:
-                continue
-            car = new_cars[car_actor_id]
-            if not car or not player.car:
-                continue
-            player.car.actor_id = car.actor_id
+        if len(categorized_updated_actors["cars_for_players"]):
+            for player in self.players.values():
+                player.assign_car(
+                    categorized_new_actors["cars"],
+                    categorized_updated_actors["cars_for_players"],
+                )
+                player.car.assign_components(categorized_new_actors["car_components"])
 
-            if len(new_components_for_cars) == 0:
-                continue
-            for car_component in new_car_components:
-                if car_component.actor_id in new_components_for_cars:
-                    active_actor_id = new_components_for_cars[car_component.actor_id]
-                    car_component.active_actor_id = active_actor_id
-            player.car.assign_components(new_car_components)
-
-        for updated_actor in updated_actors:
-            if updated_actor.actor_id == 8:
-                events.append(updated_actor)
-                continue
-
-            attribute = updated_actor.raw.get("attribute")
-            if not attribute:
-                continue
-
-            if frame_index >= 245:
-                pass
-
-            if frame_index >= 889:
-                pass
-
-            if updated_actor.actor_id == 52 or updated_actor.active_actor_id == 52:
-                pass
-
-            activated_actor = attribute.get("Boolean")
-            if activated_actor is not None:
-                changed = self.update_actor_activity(updated_actor, frame)
-                if changed:
-                    continue
-
-            rigid_body = attribute.get("RigidBody")
-            if rigid_body:
-                changed = self.update_actor_position(updated_actor, frame)
-                if changed:
-                    continue
-
-            if updated_actor.category == "car_component":
-                for player in self.players.values():
-                    if not player.car:
-                        continue
-                    if player.car.owns(updated_actor) or player.car.is_self(
-                        updated_actor
-                    ):
-                        player.car.update_components(
-                            [Car_Component(updated_actor)],
-                            self.active,
-                            frame,
-                            self.round,
-                        )
-
-            demolition: Demolition_Attribute | None = attribute.get("DemolishExtended")
-            if demolition:
-                attacker_car = None
-                victim_car = None
-                for player in self.players.values():
-                    if not player.car:
-                        continue
-                    if demolition["attacker"]["actor"] == player.car.actor_id:
-                        attacker_car = player.car
-                    if demolition["victim"]["actor"] == player.car.actor_id:
-                        victim_car = player.car
-                if attacker_car and victim_car:
-                    attacker_car.demo(victim_car, updated_actor, frame, self.round)
-                    victim_car.demod(attacker_car, updated_actor, frame, self.round)
-                    continue
+        self.process_updated_actors(categorized_updated_actors["others"], frame)
 
         if self.last_frame:
             self.last_frame["active"] = self.active

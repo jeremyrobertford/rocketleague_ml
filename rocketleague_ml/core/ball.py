@@ -6,3 +6,6 @@ class Ball(Actor):
         super().__init__(ball.raw, ball.objects)
         if not self.positioning:
             raise ValueError(f"Ball failed to position {ball.raw}")
+
+    def team_hit(self, team_hit_actor: Actor, frame: Raw_Frame, round: int):
+        return

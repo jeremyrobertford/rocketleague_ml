@@ -1,5 +1,6 @@
 import math
 from rocketleague_ml.types.attributes import Rotation_Dict
+from rocketleague_ml.config import BOOST_PAD_MAP
 
 
 def convert_byte_to_float(bytes: int):
@@ -33,3 +34,12 @@ def convert_euler_to_quat(
     w = cr * cp * cy + sr * sp * sy
 
     return {"x": x, "y": y, "z": z, "w": w}
+
+
+def parse_boost_actor_name(object_str: str):
+    try:
+        idx = int(object_str.split("_")[-1])  # grab suffix number
+    except ValueError:
+        return None
+
+    return BOOST_PAD_MAP.get(idx, None)

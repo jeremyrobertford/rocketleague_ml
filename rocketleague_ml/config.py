@@ -44,7 +44,12 @@ CAR_COMPONENT_LABELS = {
     "TAGame.Vehicle_TA:ReplicatedJump": "rep_jump",
     "TAGame.Vehicle_TA:ReplicatedDodge": "rep_dodge",
     "TAGame.Vehicle_TA:ReplicatedBoost": "rep_boost",
+    "TAGame.CarComponent_Boost_TA:ReplicatedBoost": "rep_boost",
     "TAGame.CarComponent_Boost_TA:ReplicatedBoostAmount": "rep_boost_amt",
+    "TAGame.Vehicle_TA:bDriving": "driving",
+    "TAGame.CarComponent_TA:ReplicatedActive": "active",
+    "TAGame.CarComponent_Dodge_TA:DodgeTorque": "dodge",
+    "TAGame.CarComponent_AirActivate_TA:AirActivateCount": "component_usage_in_air",
 }
 PLAYER_COMPONENT_LABELS = {
     "TAGame.Default__PRI_TA": "",
@@ -53,10 +58,12 @@ PLAYER_COMPONENT_LABELS = {
     "Archetypes.Teams.Team1": "Orange",
     "TAGame.PRI_TA:SteeringSensitivity": "steering_sensitivity",
     "TAGame.PRI_TA:MatchScore": "score",
+    "Engine.PlayerReplicationInfo:Ping": "ping",
 }
 CAMERA_SETTINGS_LABELS = {
     "TAGame.Default__CameraSettingsActor_TA": "settings",
     "TAGame.CameraSettingsActor_TA:CameraYaw": "yaw",
+    "TAGame.CameraSettingsActor_TA:CameraPitch": "pitch",
     "TAGame.CameraSettingsActor_TA:bUsingSecondaryCamera": "car_cam",
     "TAGame.CameraSettingsActor_TA:ProfileSettings": "camera_settings",
 }
@@ -77,6 +84,8 @@ LABELS = {
     "TAGame.RBActor_TA:ReplicatedRBState": "rigid_body",
     "TAGame.CameraSettingsActor_TA:PRI": "settings_to_player",
     "TAGame.Car_TA:ReplicatedDemolishExtended": "player_demod",
+    "TAGame.VehiclePickup_TA:NewReplicatedPickupData": "boost_grab",
+    "TAGame.Ball_TA:HitTeamNum": "team_ball_hit",
 }
 
 Z_GROUND = 30
@@ -89,3 +98,40 @@ TOL = 50
 FIELD_X = [-4096, 4096, 4096, -4096, -4096]
 FIELD_Y = [-5120, -5120, 5120, 5120, -5120]
 ROUND_LENGTH = 300
+
+# Boost pad mapping for DFH Stadium (stadium_day_p, standard soccar layout).
+# Data source: RLBot "useful game values" + community docs.
+
+BOOST_PAD_MAP = {
+    0: (0.0, -4240.0, 70.0, 12),
+    1: (-1792.0, -4184.0, 70.0, 12),
+    2: (1792.0, -4184.0, 70.0, 12),
+    3: (-3072.0, -4096.0, 73.0, 100),  # big
+    4: (3072.0, -4096.0, 73.0, 100),  # big
+    5: (-940.0, -3308.0, 70.0, 12),
+    6: (940.0, -3308.0, 70.0, 12),
+    7: (0.0, -2816.0, 70.0, 12),
+    8: (-3584.0, -2484.0, 70.0, 12),
+    9: (3584.0, -2484.0, 70.0, 12),
+    10: (-1788.0, -2300.0, 70.0, 12),
+    11: (1788.0, -2300.0, 70.0, 12),
+    12: (-2048.0, -1036.0, 70.0, 12),
+    13: (0.0, -1024.0, 70.0, 12),
+    14: (2048.0, -1036.0, 70.0, 12),
+    15: (-3584.0, 0.0, 73.0, 100),  # big
+    16: (-1024.0, 0.0, 70.0, 12),
+    17: (1024.0, 0.0, 70.0, 12),
+    18: (3584.0, 0.0, 73.0, 100),  # big
+    19: (-2048.0, 1036.0, 70.0, 12),
+    20: (0.0, 1024.0, 70.0, 12),
+    21: (2048.0, 1036.0, 70.0, 12),
+    22: (-1788.0, 2300.0, 70.0, 12),
+    23: (1788.0, 2300.0, 70.0, 12),
+    24: (-3584.0, 2484.0, 70.0, 12),
+    25: (3584.0, 2484.0, 70.0, 12),
+    26: (0.0, 2816.0, 70.0, 12),
+    27: (-940.0, 3308.0, 70.0, 12),
+    28: (940.0, 3308.0, 70.0, 12),
+    29: (-3072.0, 4096.0, 73.0, 100),  # big
+    30: (3072.0, 4096.0, 73.0, 100),  # big
+}
