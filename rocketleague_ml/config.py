@@ -1,5 +1,7 @@
 import os
 
+LOG = True
+
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "..", "data")
@@ -7,6 +9,7 @@ RAW_REPLAYS = os.path.join(DATA_DIR, "raw")
 PREPROCESSED = os.path.join(DATA_DIR, "preprocessed")
 PROCESSED = os.path.join(DATA_DIR, "processed")
 FEATURES = os.path.join(DATA_DIR, "features")
+DEFAULT_BIN_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "bin"))
 
 # Training configs
 RANDOM_SEED = 42
