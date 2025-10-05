@@ -185,11 +185,11 @@ class Car(Actor):
         super().__init__(car.raw, car.objects)
         if not self.positioning:
             raise ValueError(f"Car failed to position {car.raw}")
-        self.boost: Boost_Car_Component | None = None
-        self.jump: Car_Component | None = None
-        self.dodge: Dodge_Car_Component | None = None
-        self.flip: Car_Component | None = None
-        self.double_jump: Car_Component | None = None
+        self._boost: Boost_Car_Component | None = None
+        self._jump: Car_Component | None = None
+        self._dodge: Dodge_Car_Component | None = None
+        self._flip: Car_Component | None = None
+        self._double_jump: Car_Component | None = None
         self.steer: Car_Component | None = None
         self.throttle: Car_Component | None = None
         self.handbrake: Car_Component | None = None

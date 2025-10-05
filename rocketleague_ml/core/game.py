@@ -29,7 +29,7 @@ class Game:
         self.active = False
         self.round = 0
         self.rounds: Dict[int, Any] = {}
-        self.ball: Ball | None = None
+        self._ball: Ball | None = None
         self.players: Dict[int, PlayerWithCar] = {}
         self.boost_pads: Dict[int, Actor] = {}
         self.get_players()
@@ -37,6 +37,13 @@ class Game:
         self.match_time_remaining: float = ROUND_LENGTH
         self.in_overtime: bool = False
         self.overtime_elapsed: float = 0.0
+
+    @property
+    def ball(self) -> Ball:
+        b = self._ball
+        if b is None:
+            raise ValueError("Ball not assigned")
+        return b
 
     def get_players(self):
         new_actors = self.initial_frame["new_actors"]
@@ -52,7 +59,7 @@ class Game:
                 cars.append(Car(new_actor))
                 continue
             if new_actor.category == "ball":
-                self.ball = Ball(new_actor)
+                self._ball = Ball(new_actor)
                 continue
             if new_actor.category == "car_component":
                 car_components.append(Car_Component(new_actor))
@@ -124,10 +131,7 @@ class Game:
         self.rounds[self.round] = {"start_time": frame["time"]}
         if not self.last_frame:
             raise ValueError("No last inactive frame in inactive game")
-        if self.ball:
-            self.ball.update_position(
-                self.ball, self.active, self.last_frame, self.round
-            )
+        self.ball.update_position(self.ball, self.active, self.last_frame, self.round)
         for player in self.players.values():
             if player.car:
                 # initialize positions
@@ -142,30 +146,41 @@ class Game:
         self.rounds[self.round]["end_time"] = frame["time"]
 
     def update_actor_position(self, updated_actor: Actor, frame: Raw_Frame):
-        if self.ball and self.ball.actor_id == updated_actor.actor_id:
+        if self.ball.is_self(updated_actor):
             self.ball.update_position(updated_actor, self.active, frame, self.round)
-            return True
+            return
+
         for player in self.players.values():
-            car = player.car
-            if not car:
+            if player.car.is_self(updated_actor):
+                player.car.update_position(
+                    updated_actor, self.active, frame, self.round
+                )
                 return True
-            if car.actor_id == updated_actor.actor_id:
-                car.update_position(updated_actor, self.active, frame, self.round)
+            if player.car.boost and player.car.boost.actor_id == updated_actor.actor_id:
+                player.car.boost.update_position(
+                    updated_actor, self.active, frame, self.round
+                )
                 return True
-            if car.boost and car.boost.actor_id == updated_actor.actor_id:
-                car.boost.update_position(updated_actor, self.active, frame, self.round)
+            if player.car.jump and player.car.jump.actor_id == updated_actor.actor_id:
+                player.car.jump.update_position(
+                    updated_actor, self.active, frame, self.round
+                )
                 return True
-            if car.jump and car.jump.actor_id == updated_actor.actor_id:
-                car.jump.update_position(updated_actor, self.active, frame, self.round)
+            if player.car.dodge and player.car.dodge.actor_id == updated_actor.actor_id:
+                player.car.dodge.update_position(
+                    updated_actor, self.active, frame, self.round
+                )
                 return True
-            if car.dodge and car.dodge.actor_id == updated_actor.actor_id:
-                car.dodge.update_position(updated_actor, self.active, frame, self.round)
+            if player.car.flip and player.car.flip.actor_id == updated_actor.actor_id:
+                player.car.flip.update_position(
+                    updated_actor, self.active, frame, self.round
+                )
                 return True
-            if car.flip and car.flip.actor_id == updated_actor.actor_id:
-                car.flip.update_position(updated_actor, self.active, frame, self.round)
-                return True
-            if car.double_jump and car.double_jump.actor_id == updated_actor.actor_id:
-                car.double_jump.update_position(
+            if (
+                player.car.double_jump
+                and player.car.double_jump.actor_id == updated_actor.actor_id
+            ):
+                player.car.double_jump.update_position(
                     updated_actor, self.active, frame, self.round
                 )
                 return True

@@ -1,4 +1,5 @@
 from rocketleague_ml.core.actor import Actor
+from rocketleague_ml.types.attributes import Raw_Frame
 
 
 class Ball(Actor):
