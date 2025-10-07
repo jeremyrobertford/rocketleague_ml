@@ -452,8 +452,6 @@ def extract_features_from_game_for_player(game: Game, player_name: str):
         features = extract_velocity_features(features, game, round, main_player, config)
         features = extract_speed_features(features, game, main_player, config)
 
-        debug = features[(features["time"] > 136) & (features["time"] < 146)]
-
         round_summary: Dict[str, float] = {}
 
         avg_speed = features["linear_velocity"].mean()

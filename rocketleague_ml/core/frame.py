@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, cast, Any, Dict
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.types.attributes import Raw_Frame
 
@@ -27,7 +27,19 @@ class Frame:
         return None
 
     def set_values_from_previous(self):
-        self.processed_fields = self.game.previous_frame.processed_fields
+        one_time_event_keys = [
+            "demo",
+            "demod",
+            "boost_pickup",
+        ]
+        for key, value in self.game.previous_frame.processed_fields.items():
+            ignore = False
+            for one_time_event_key in one_time_event_keys:
+                if one_time_event_key in key:
+                    ignore = True
+                    break
+            if not ignore:
+                self.processed_fields[key] = value
 
     def calculate_match_time(self):
         self.round = self.game.round
@@ -56,4 +68,15 @@ class Frame:
         return None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"time": self.time}
+        return cast(
+            Dict[str, Any],
+            {
+                "id": self.game.id,
+                "time": self.time,
+                "delta": self.delta,
+                "round": self.round,
+                "active": self.active,
+                "match_time_label": self.match_time_label,
+            }
+            | self.processed_fields,
+        )

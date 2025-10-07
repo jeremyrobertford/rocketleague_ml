@@ -4,7 +4,6 @@ from rocketleague_ml.config import ROUND_LENGTH
 from rocketleague_ml.types.attributes import (
     Raw_Game_Data,
     Raw_Frame,
-    Actor_Export,
 )
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.ball import Ball
@@ -283,11 +282,3 @@ class Game:
         del self.cars[old_car_actor_id]
         self.cars[new_car.actor_id] = new_car
         return None
-
-    def to_dict(self) -> Actor_Export:
-        return {
-            "rounds": self.round,
-            "ball": self.ball.to_dict(),
-            "frame": [frame.to_dict() for frame in self.processed_frames],
-            "players": {p: player.to_dict() for p, player in self.players.items()},
-        }

@@ -11,9 +11,9 @@ from rocketleague_ml.types.attributes import (
 class Base_Position:
     def __init__(self, position: Position_Dict):
         self.raw = position
-        self.x = position["x"]
-        self.y = position["y"]
-        self.z = position["z"]
+        self.x = position["x"] or 0
+        self.y = position["y"] or 0
+        self.z = position["z"] or 0
 
     def copy(self):
         return Base_Position(self.to_dict())
@@ -107,7 +107,8 @@ class Velocity(Position):
 
 class Positioning:
     def __init__(self, positioning: Rigid_Body_Positioning | Trajectory):
-        location = positioning["location"] or {"x": 0, "y": 0, "z": 0}
+        default_position: Position_Dict = {"x": 0, "y": 0, "z": 0}
+        location = positioning["location"] or default_position
         self.location = Position(location)
         rotation = positioning["rotation"] or {"x": 0, "y": 0, "z": 0, "w": 0}
         if "yaw" in rotation:
@@ -129,12 +130,12 @@ class Positioning:
         self.linear_velocity = (
             Position(positioning["linear_velocity"])
             if "linear_velocity" in positioning and positioning["linear_velocity"]
-            else None
+            else Position(default_position)
         )
         self.angular_velocity = (
             Position(positioning["angular_velocity"])
             if "angular_velocity" in positioning and positioning["angular_velocity"]
-            else None
+            else Position(default_position)
         )
 
     def copy(self):

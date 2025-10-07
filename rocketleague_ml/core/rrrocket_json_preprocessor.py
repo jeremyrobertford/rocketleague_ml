@@ -93,6 +93,12 @@ class RRRocket_JSON_Preprocessor:
             f"Preprocessed file does not exist at {preprocessed_file_path}"
         )
 
+    def try_load_preprocessed_file(self, replay_file_name: str):
+        try:
+            return self.load_preprocessed_file(replay_file_name)
+        except Exception:
+            return None
+
     def save_preprocessed_file(
         self, replay_file_name: str, game_data_json: Raw_Game_Data
     ):
@@ -129,7 +135,7 @@ class RRRocket_JSON_Preprocessor:
         dict
             Parsed JSON output from rrrocket.
         """
-        preprocessed_json = self.load_preprocessed_file(file_name)
+        preprocessed_json = self.try_load_preprocessed_file(file_name)
         if preprocessed_json and not overwrite:
             self.logger.print(f"Using existing JSON for {file_name}.")
             return preprocessed_json
