@@ -1,9 +1,14 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.utils.helpers import convert_byte_to_float
 
+if TYPE_CHECKING:
+    from rocketleague_ml.core.player import Player
 
-class CameraSettings(Actor):
-    def __init__(self, camera_settings: Actor):
+
+class Camera_Settings(Actor):
+    def __init__(self, camera_settings: Actor, player: Player):
         super().__init__(camera_settings.raw, camera_settings.objects)
         self.yaw: float | None = None
         self.pitch: float | None = None
@@ -15,6 +20,7 @@ class CameraSettings(Actor):
         self.stiffness: float | None = None
         self.swivel: float | None = None
         self.transition: float | None = None
+        self.player: Player = player
 
     def update_settings(self, updated_settings: Actor):
         attribute = updated_settings.raw.get("attribute")

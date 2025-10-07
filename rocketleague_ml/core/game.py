@@ -1,19 +1,20 @@
-from typing import Dict, List, Any, cast
+from __future__ import annotations
+from typing import TYPE_CHECKING, Dict, List, Any
 from rocketleague_ml.config import ROUND_LENGTH
-from rocketleague_ml.utils.helpers import parse_boost_actor_name
 from rocketleague_ml.types.attributes import (
-    Categorized_Updated_Actors,
-    Categorized_New_Actors,
     Raw_Game_Data,
     Raw_Frame,
     Actor_Export,
-    Demolition_Attribute,
-    Boost_Grab_Attribute,
 )
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.ball import Ball
 from rocketleague_ml.core.car import Car, Boost_Car_Component, Car_Component
-from rocketleague_ml.core.player import PlayerWithCar, Player, Player_Component
+from rocketleague_ml.core.camera_settings import Camera_Settings
+from rocketleague_ml.core.player import Player
+
+
+if TYPE_CHECKING:
+    from rocketleague_ml.core.frame import Frame
 
 
 class Game:
@@ -22,21 +23,31 @@ class Game:
         self.id = game_data["properties"]["Id"]
         self.names = {i: obj for i, obj in enumerate(game_data["names"])}
         self.objects = {i: obj for i, obj in enumerate(game_data["objects"])}
-        self.initial_frame = game_data["network_frames"]["frames"][0]
+        self._previous_frame: Frame | None = None
+        self.initial_frame: Raw_Frame = game_data["network_frames"]["frames"][0]
         self.frames: List[Raw_Frame] = game_data["network_frames"]["frames"][1:]
-        self.last_frame: Raw_Frame | None = self.initial_frame
-        self.active_clock = False
-        self.active = False
-        self.round = 0
+        self.active_clock: bool = False
+        self.active: bool = False
+        self.round: int = 0
         self.rounds: Dict[int, Any] = {}
-        self._ball: Ball | None = None
-        self.players: Dict[int, PlayerWithCar] = {}
+        self.players: Dict[int, Player] = {}
         self.boost_pads: Dict[int, Actor] = {}
-        self.get_players()
-
         self.match_time_remaining: float = ROUND_LENGTH
         self.in_overtime: bool = False
         self.overtime_elapsed: float = 0.0
+        self.processed_frames: List[Frame] = []
+        return None
+
+    @property
+    def previous_frame(self) -> Frame:
+        pf = self._previous_frame
+        if pf is None:
+            raise ValueError("Previous frame is not assigned")
+        return pf
+
+    @previous_frame.setter
+    def previous_frame(self, new_frame: Frame):
+        self._previous_frame = new_frame
 
     @property
     def ball(self) -> Ball:
@@ -45,401 +56,238 @@ class Game:
             raise ValueError("Ball not assigned")
         return b
 
-    def get_players(self):
-        new_actors = self.initial_frame["new_actors"]
-        updated_actors = self.initial_frame["updated_actors"]
-
-        cars: List[Car] = []
-        car_components: List[Car_Component] = []
-        teams: List[Player_Component] = []
-
-        for na in new_actors:
-            new_actor = Actor(na, self.objects)
-            if new_actor.category == "car":
-                cars.append(Car(new_actor))
-                continue
-            if new_actor.category == "ball":
-                self._ball = Ball(new_actor)
-                continue
-            if new_actor.category == "car_component":
-                car_components.append(Car_Component(new_actor))
-                continue
-            if new_actor.category == "player_component":
-                teams.append(Player_Component(new_actor))
-
-        players: List[Actor] = []
-        cars_to_players: List[Actor] = []
-        settings_to_players: List[Actor] = []
-        camera_settings: List[Actor] = []
-        player_components: List[Player_Component] = []
-        secondary_car_components: List[Car_Component] = []
-
-        for ua in updated_actors:
-            updated_actor = Actor(ua, self.objects)
-            if updated_actor.category == "vehicle":
-                for car_component in car_components:
-                    if car_component.is_self(updated_actor):
-                        car_component.active_actor_id = updated_actor.active_actor_id
-                        break
-                continue
-
-            if updated_actor.category == "car_to_player":
-                cars_to_players.append(updated_actor)
-                continue
-
-            if updated_actor.category == "settings_to_player":
-                settings_to_players.append(updated_actor)
-                continue
-
-            if updated_actor.secondary_category == "rep_boost":
-                secondary_car_components.append(Boost_Car_Component(updated_actor))
-                continue
-
-            if updated_actor.category == "car_component":
-                secondary_car_components.append(Car_Component(updated_actor))
-                continue
-
-            if updated_actor.category == "player":
-                players.append(updated_actor)
-                continue
-
-            if updated_actor.category == "camera_settings":
-                camera_settings.append(updated_actor)
-                continue
-
-            if updated_actor.category == "player_component":
-                player_components.append(Player_Component(updated_actor))
-                continue
-
-        for car in cars:
-            car.assign_components(car_components)
-            car.update_components(
-                secondary_car_components, self.active, self.initial_frame, self.round
+    def connect_disconnected_car_component(self, connection: Actor):
+        if not connection.active_actor_id:
+            raise ValueError(
+                f"Connecting disconnected car components requires active actor id {connection.raw}"
             )
+        car = self.cars[connection.active_actor_id]
+        disconnected_car_component = self.disconnected_car_components[
+            connection.actor_id
+        ]
+        car_component = Car_Component(disconnected_car_component, car)
+        match car_component.secondary_category:
+            case "boost":
+                car_component = Boost_Car_Component(car_component)
+                car.boost = car_component
+            case "dodge":
+                car.dodge = car_component
+            case "double_jump":
+                car.double_jump = car_component
+            case "flip":
+                car.flip = car_component
+            case "jump":
+                car.jump = car_component
+            case _:
+                raise ValueError(f"Unknown car component {car_component.raw}")
+        del self.disconnected_car_components[connection.actor_id]
+        self.car_components[car_component.actor_id] = car_component
+        return None
 
-        for p in players:
-            player = Player(p)
-            player.assign_car(cars, cars_to_players)
-            player.assign_team(teams, player_components)
-            player.assign_camera_settings(camera_settings, settings_to_players)
-            player.update_components(player_components)
-            self.players[player.actor_id] = PlayerWithCar(player)
-
-    def activate_game(self, frame: Raw_Frame):
-        self.round += 1
-        self.active = True
-        self.rounds[self.round] = {"start_time": frame["time"]}
-        if not self.last_frame:
-            raise ValueError("No last inactive frame in inactive game")
-        self.ball.update_position(self.ball, self.active, self.last_frame, self.round)
-        for player in self.players.values():
-            if player.car:
-                # initialize positions
-                player.car.update_position(
-                    player.car, self.active, self.last_frame, self.round
-                )
-
-    def deactivate_game(self, frame: Raw_Frame):
-        self.active = False
-        self.active_clock = False
-        self.match_time_remaining += 3
-        self.rounds[self.round]["end_time"] = frame["time"]
-
-    def update_actor_position(self, updated_actor: Actor, frame: Raw_Frame):
-        if self.ball.is_self(updated_actor):
-            self.ball.update_position(updated_actor, self.active, frame, self.round)
-            return
-
-        for player in self.players.values():
-            if player.car.is_self(updated_actor):
-                player.car.update_position(
-                    updated_actor, self.active, frame, self.round
-                )
-                return True
-            if player.car.boost and player.car.boost.actor_id == updated_actor.actor_id:
-                player.car.boost.update_position(
-                    updated_actor, self.active, frame, self.round
-                )
-                return True
-            if player.car.jump and player.car.jump.actor_id == updated_actor.actor_id:
-                player.car.jump.update_position(
-                    updated_actor, self.active, frame, self.round
-                )
-                return True
-            if player.car.dodge and player.car.dodge.actor_id == updated_actor.actor_id:
-                player.car.dodge.update_position(
-                    updated_actor, self.active, frame, self.round
-                )
-                return True
-            if player.car.flip and player.car.flip.actor_id == updated_actor.actor_id:
-                player.car.flip.update_position(
-                    updated_actor, self.active, frame, self.round
-                )
-                return True
-            if (
-                player.car.double_jump
-                and player.car.double_jump.actor_id == updated_actor.actor_id
-            ):
-                player.car.double_jump.update_position(
-                    updated_actor, self.active, frame, self.round
-                )
-                return True
-        return False
-
-    def update_actor_activity(self, updated_actor: Actor, frame: Raw_Frame):
-        if updated_actor.category == "car_component":
-            for player in self.players.values():
-                car = player.car
-                if car.is_self(updated_actor) or car.owns(updated_actor):
-                    car.update_components(
-                        [Car_Component(updated_actor)],
-                        self.active,
-                        frame,
-                        self.round,
-                    )
-                    return True
-        return False
-
-    def calculate_match_time(self, frame: Raw_Frame, frame_index: int):
-        if self.active and not self.in_overtime:
-            self.match_time_remaining = max(
-                0.0, self.match_time_remaining - frame["delta"]
+    def connect_disconnected_player_car(self, connection: Actor):
+        if not connection.active_actor_id:
+            raise ValueError(
+                f"Connecting disconnected cars requires active actor id {connection.raw}"
             )
+        player = self.players[connection.active_actor_id]
+        disconnected_car = self.disconnected_cars[connection.actor_id]
+        car = Car(disconnected_car, player)
+        player.assign_car(car)
 
-            EPS = 1e-9
-            if self.match_time_remaining <= EPS:
-                self.match_time_remaining = 0.0
-                self.in_overtime = True
-                self.overtime_elapsed = 0.0
-        elif self.active and self.in_overtime:
-            self.overtime_elapsed += frame["delta"]
+        del self.disconnected_cars[connection.actor_id]
+        self.cars[car.actor_id] = car
+        return None
 
-        if not self.in_overtime:
-            frame["match_time"] = float(self.match_time_remaining)
-            frame["in_overtime"] = False
-            mins, secs = divmod(int(self.match_time_remaining), 60)
-            frame["match_time_label"] = f"{mins}:{secs:02d}"
-        else:
-            frame["match_time"] = -float(self.overtime_elapsed)
-            frame["in_overtime"] = True
-            mins, secs = divmod(int(self.overtime_elapsed), 60)
-            frame["match_time_label"] = f"+{mins}:{secs:02d}"
-
-        self.frames[frame_index] = frame
-        return frame
-
-    def categorize_new_actor(
+    def process_setting_new_actor(
         self,
         new_actor: Actor,
-        frame: Raw_Frame,
-        categorized_actors: Categorized_New_Actors,
+        players: Dict[int, Player],
+        player_cars: Dict[int, int],
+        player_teams: Dict[int, Dict[int, int]],
+        car_components: Dict[int, int],
+        player_camera_settings: Dict[int, int],
+        camera_settings: Dict[int, Actor],
+        unhandled_new_actors: Dict[int, Actor],
+        delayed_new_actors: Dict[int, Actor],
     ):
-        if ".TheWorld:PersistentLevel.VehiclePickup_Boost_TA_" in new_actor.object:
-            self.boost_pads[new_actor.actor_id] = new_actor
-            return
-
-        if new_actor.category == "car":
-            categorized_actors["cars"].append(Car(new_actor))
-            return
-
-        if new_actor.category == "car_component":
-            categorized_actors["car_components"].append(Car_Component(new_actor))
-            return
-
-        return
-
-    def categorize_new_actors(self, frame: Raw_Frame):
-        categorized_actors: Categorized_New_Actors = {"cars": [], "car_components": []}
-        for na in frame["new_actors"]:
-            new_actor = Actor(na, self.objects)
-            self.categorize_new_actor(new_actor, frame, categorized_actors)
-        return categorized_actors
-
-    def categorize_updated_actor(
-        self,
-        updated_actor: Actor,
-        frame: Raw_Frame,
-        categorized_actors: Categorized_Updated_Actors,
-        new_actors: Categorized_New_Actors,
-    ):
-        if "event" in updated_actor.category:
-            categorized_actors["events"].append(updated_actor)
-            return
-
-        if updated_actor.category == "car_to_player" and updated_actor.active_actor_id:
-            categorized_actors["cars_for_players"].append(updated_actor)
-            return
-
-        if updated_actor.category == "vehicle" and updated_actor.active_actor_id:
-            for car_component in new_actors["car_components"]:
-                if car_component.is_self(updated_actor):
-                    car_component.active_actor_id = updated_actor.active_actor_id
-                    return
-
-        if ".TheWorld:PersistentLevel.VehiclePickup_Boost_TA_" in updated_actor.object:
-            self.boost_pads[updated_actor.actor_id] = updated_actor
-            return
-
-        if updated_actor.category == "game_start_event" and not frame["resync"]:
-            attribute = updated_actor.raw.get("attribute")
-            if not attribute or "Int" not in attribute:
-                raise ValueError("Game active state not valid {updated_actor.raw}")
-            name = self.names[attribute["Int"]]
-            if name == "Active":
-                self.activate_game(frame)
-            elif name == "PostGoalScored":
-                self.deactivate_game(frame)
-            return
-
-        categorized_actors["others"].append(updated_actor)
-        return
-
-    def categorize_updated_actors(
-        self, frame: Raw_Frame, new_actors: Categorized_New_Actors
-    ):
-        categorized_actors: Categorized_Updated_Actors = {
-            "events": [],
-            "others": [],
-            "cars_for_players": [],
-        }
-        for ua in frame["updated_actors"]:
-            updated_actor = Actor(ua, self.objects)
-            self.categorize_updated_actor(
-                updated_actor, frame, categorized_actors, new_actors
-            )
-        return categorized_actors
-
-    def process_updated_actor(self, updated_actor: Actor, frame: Raw_Frame):
-        attribute = updated_actor.raw.get("attribute")
-        if not attribute:
-            return
-
-        attribute_key = [*attribute.keys()][0]
-
-        match attribute_key:
-            case "Boolean":
-                self.update_actor_activity(updated_actor, frame)
-                return
-            case "RigidBody":
-                self.update_actor_position(updated_actor, frame)
-                return
-            case "DemolishExtended":
-                demolition = cast(Demolition_Attribute, attribute)
-                attacker_car = None
-                victim_car = None
-                for player in self.players.values():
-                    if demolition["attacker"]["actor"] == player.car.actor_id:
-                        attacker_car = player.car
-                    if demolition["victim"]["actor"] == player.car.actor_id:
-                        victim_car = player.car
-                if not attacker_car:
-                    raise ValueError(
-                        f"No matching attacker car in demo actor {updated_actor.raw}"
-                    )
-                if not victim_car:
-                    raise ValueError(
-                        f"No matching victim car in demo actor {updated_actor.raw}"
-                    )
-                attacker_car.demo(victim_car, updated_actor, frame, self.round)
-                victim_car.demod(attacker_car, updated_actor, frame, self.round)
-            case "PickupNew":
-                boost_grab = cast(Boost_Grab_Attribute, attribute)
-                boost_actor = self.boost_pads[updated_actor.actor_id]
-                if not boost_actor:
-                    raise ValueError(
-                        f"Cannot find boost actor {updated_actor.actor_id}"
-                    )
-                boost_data = parse_boost_actor_name(boost_actor.object)
-                if not boost_data:
-                    raise ValueError(
-                        f"Boost data not found for boost actor {boost_actor.object}"
-                    )
-                for player in self.players.values():
-                    if not player.car.boost:
-                        raise ValueError(
-                            f"No matching player car boost for boost pickup {updated_actor.raw}"
-                        )
-                    if player.car.actor_id == boost_grab["instigator"]:
-                        player.car.boost.pickup(
-                            boost_data, updated_actor, frame, self.round
-                        )
-                        return
-                raise ValueError(
-                    f"Player car boost pickup never updated {updated_actor.raw}"
-                )
-            case _:
-                pass
-
-        match updated_actor.category:
+        match new_actor.category:
+            case "car":
+                if new_actor.actor_id not in player_cars:
+                    self.disconnected_cars[new_actor.actor_id] = new_actor
+                    return None
+                player_actor_id = player_cars[new_actor.actor_id]
+                player = players[player_actor_id]
+                car = Car(new_actor, player)
+                player.assign_car(car)
+                self.players[player.actor_id] = player
+                self.cars[car.actor_id] = car
+            case "ball":
+                self._ball = Ball(new_actor)
             case "car_component":
-                for player in self.players.values():
-                    if player.car.owns(updated_actor) or player.car.is_self(
-                        updated_actor
-                    ):
-                        car_component = (
-                            Boost_Car_Component(updated_actor)
-                            if updated_actor.secondary_category == "rep_boost"
-                            else Car_Component(updated_actor)
-                        )
-                        player.car.update_components(
-                            [car_component],
-                            self.active,
-                            frame,
-                            self.round,
-                        )
-                        return
-                raise ValueError(f"Never updated car component {updated_actor.raw}")
-            case "camera_settings":
-                for player in self.players.values():
-                    player.update_camera_settings([updated_actor])
-                return
+                if new_actor.actor_id not in car_components:
+                    self.disconnected_car_components[new_actor.actor_id] = new_actor
+                    return None
+                car_actor_id = car_components[new_actor.actor_id]
+                if car_actor_id not in self.cars:
+                    delayed_new_actors[new_actor.actor_id] = new_actor
+                    return None
+                car = self.cars[car_actor_id]
+                car_component = Car_Component(new_actor, car)
+                car_component.car = car
+                match new_actor.secondary_category:
+                    case "boost":
+                        car_component = Boost_Car_Component(car_component)
+                        car.boost = car_component
+                    case "dodge":
+                        car.dodge = car_component
+                    case "double_jump":
+                        car.double_jump = car_component
+                    case "flip":
+                        car.flip = car_component
+                    case "jump":
+                        car.jump = car_component
+                    case _:
+                        raise ValueError(f"Unknown car component {new_actor.raw}")
+                self.car_components[new_actor.actor_id] = car_component
             case "player_component":
-                return
-            case "team_ball_hit":
-                self.ball.team_hit(updated_actor, frame, self.round)
-                return
+                self.teams[new_actor.actor_id] = new_actor
+                for player_actor_id in player_teams[new_actor.actor_id].values():
+                    player = (
+                        self.players.get(player_actor_id) or players[player_actor_id]
+                    )
+                    player.team = new_actor.secondary_category
+            case "camera_settings":
+                raw_camera_settings = camera_settings[new_actor.actor_id]
+                player_actor_id = player_camera_settings[new_actor.actor_id]
+                player = players[player_actor_id]
+                players_camera_settings = Camera_Settings(raw_camera_settings, player)
+                player.assign_camera_settings(players_camera_settings)
+                if not player.camera_settings:
+                    raise ValueError(f"Camera settings not assigned {new_actor.raw}")
+                self.camera_settings[new_actor.actor_id] = player.camera_settings
             case _:
-                pass
+                unhandled_new_actors[new_actor.actor_id] = new_actor
 
-        return
+    def set_actors(self, frame: Frame):
+        self._ball: Ball | None = None
+        self.camera_settings: Dict[int, Camera_Settings] = {}
+        self.cars: Dict[int, Car] = {}
+        self.car_components: Dict[int, Car_Component | Boost_Car_Component] = {}
+        self.disconnected_cars: Dict[int, Actor] = {}
+        self.disconnected_car_components: Dict[int, Actor] = {}
+        self.disconnected_car_component_updates: Dict[int, List[Actor]] = {}
+        self.teams: Dict[int, Actor] = {}
 
-    def process_updated_actors(self, updated_actors: List[Actor], frame: Raw_Frame):
-        for updated_actor in updated_actors:
-            self.process_updated_actor(updated_actor, frame)
+        players: Dict[int, Player] = {}
+        player_cars: Dict[int, int] = {}
+        player_teams: Dict[int, Dict[int, int]] = {}
+        car_components: Dict[int, int] = {}
+        player_camera_settings: Dict[int, int] = {}
+        camera_settings: Dict[int, Actor] = {}
+        unhandled_updated_actors: Dict[int, Actor] = {}
+        for ua in frame.updated_actors:
+            updated_actor = Actor(ua, self.objects)
+            match updated_actor.category:
+                case "player":
+                    players[updated_actor.actor_id] = Player(updated_actor)
+                case "car_to_player":
+                    if not updated_actor.active_actor_id:
+                        raise ValueError(
+                            f"Car to player does not have active actor {updated_actor.raw}"
+                        )
+                    player_cars[updated_actor.actor_id] = updated_actor.active_actor_id
+                case "vehicle":
+                    if not updated_actor.active_actor_id:
+                        raise ValueError(
+                            f"Component to car does not have active actor {updated_actor.raw}"
+                        )
+                    car_components[updated_actor.actor_id] = (
+                        updated_actor.active_actor_id
+                    )
+                case "settings_to_player":
+                    if not updated_actor.active_actor_id:
+                        raise ValueError(
+                            f"Camera settings to player does not have active actor {updated_actor.raw}"
+                        )
+                    player_camera_settings[updated_actor.actor_id] = (
+                        updated_actor.active_actor_id
+                    )
+                case "player_component":
+                    if not updated_actor.secondary_category == "team":
+                        unhandled_updated_actors[updated_actor.actor_id] = updated_actor
+                        continue
 
-    def analyze_frame(self, frame: Raw_Frame, frame_index: int):
-        resync_frame = len(frame["new_actors"]) + len(frame["updated_actors"]) > 80
-        if resync_frame:
-            frame["resync"] = True
+                    if not updated_actor.active_actor_id:
+                        raise ValueError(
+                            f"Player component to player does not have active actor {updated_actor.raw}"
+                        )
+                    if updated_actor.active_actor_id not in player_teams:
+                        player_teams[updated_actor.active_actor_id] = {}
+                    player_teams[updated_actor.active_actor_id][
+                        updated_actor.actor_id
+                    ] = updated_actor.actor_id
+                case "camera_settings":
+                    camera_settings[updated_actor.actor_id] = updated_actor
+                case _:
+                    unhandled_updated_actors[updated_actor.actor_id] = updated_actor
 
-        categorized_new_actors = self.categorize_new_actors(frame)
-        categorized_updated_actors = self.categorize_updated_actors(
-            frame, categorized_new_actors
-        )
+        delayed_new_actors: Dict[int, Actor] = {}
+        unhandled_new_actors: Dict[int, Actor] = {}
+        for na in frame.new_actors:
+            new_actor = Actor(na, self.objects)
+            self.process_setting_new_actor(
+                new_actor,
+                players,
+                player_cars,
+                player_teams,
+                car_components,
+                player_camera_settings,
+                camera_settings,
+                unhandled_new_actors,
+                delayed_new_actors,
+            )
 
-        if frame_index == 2045:
-            pass
+        for new_actor in delayed_new_actors.values():
+            self.process_setting_new_actor(
+                new_actor,
+                players,
+                player_cars,
+                player_teams,
+                car_components,
+                player_camera_settings,
+                camera_settings,
+                unhandled_new_actors,
+                delayed_new_actors,
+            )
 
-        frame = self.calculate_match_time(frame, frame_index)
+        return None
 
-        if len(categorized_updated_actors["cars_for_players"]):
-            for player in self.players.values():
-                player.assign_car(
-                    categorized_new_actors["cars"],
-                    categorized_updated_actors["cars_for_players"],
-                )
-                player.car.assign_components(categorized_new_actors["car_components"])
+    def activate_game(self):
+        self.round += 1
+        self.active = True
+        return None
 
-        self.process_updated_actors(categorized_updated_actors["others"], frame)
+    def deactivate_game(self):
+        self.active = False
+        self.active_clock = False
 
-        if self.last_frame:
-            self.last_frame["active"] = self.active
-            self.frames[frame_index - 1] = self.last_frame
-        self.last_frame = frame
-        return
+        # Unsure why this is necessary, but it makes the match time
+        # line up better
+        self.match_time_remaining += 3
+
+        return None
+
+    def update_player_car(self, player: Player, new_car: Car):
+        old_car_actor_id = player.car.actor_id
+        player.assign_car(new_car)
+        del self.cars[old_car_actor_id]
+        self.cars[new_car.actor_id] = new_car
+        return None
 
     def to_dict(self) -> Actor_Export:
         return {
             "rounds": self.round,
+            "ball": self.ball.to_dict(),
+            "frame": [frame.to_dict() for frame in self.processed_frames],
             "players": {p: player.to_dict() for p, player in self.players.items()},
         }

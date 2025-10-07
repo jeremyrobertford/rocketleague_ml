@@ -53,6 +53,7 @@ CAR_COMPONENT_LABELS = {
     "TAGame.CarComponent_TA:ReplicatedActive": "active",
     "TAGame.CarComponent_Dodge_TA:DodgeTorque": "dodge",
     "TAGame.CarComponent_AirActivate_TA:AirActivateCount": "component_usage_in_air",
+    "TAGame.CarComponent_DoubleJump_TA:DoubleJumpImpulse": "double_jump",
 }
 PLAYER_COMPONENT_LABELS = {
     "TAGame.Default__PRI_TA": "",
@@ -60,7 +61,12 @@ PLAYER_COMPONENT_LABELS = {
     "Archetypes.Teams.Team0": "Blue",
     "Archetypes.Teams.Team1": "Orange",
     "TAGame.PRI_TA:SteeringSensitivity": "steering_sensitivity",
+    "TAGame.PRI_TA:MatchAssists": "assists",
+    "TAGame.PRI_TA:MatchSaves": "saves",
     "TAGame.PRI_TA:MatchScore": "score",
+    "TAGame.PRI_TA:MatchShots": "shots",
+    "TAGame.PRI_TA:MatchGoals": "goals",
+    "TAGame.PRI_TA:TotalGameTimePlayed": "active_time",
     "Engine.PlayerReplicationInfo:Ping": "ping",
 }
 CAMERA_SETTINGS_LABELS = {

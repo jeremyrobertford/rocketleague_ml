@@ -259,18 +259,11 @@ class Labeled_Raw_Actor(TypedDict):
 
 
 class Raw_Frame(TypedDict):
-    resync: bool | None
     time: float
-    match_time: float
-    match_time_label: str
-    in_overtime: bool
-    overtime_elapsed: float
     delta: float
-    active: bool | None
     new_actors: List[Raw_Actor]
     deleted_actors: List[int]
     updated_actors: List[Raw_Actor]
-    initial_trajectory: Trajectory | None
 
 
 class Network_Frames(TypedDict):

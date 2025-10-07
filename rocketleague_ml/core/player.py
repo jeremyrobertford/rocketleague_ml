@@ -1,13 +1,8 @@
-from typing import List, cast
+from typing import cast
 from rocketleague_ml.types.attributes import String_Attribute, Actor_Export
 from rocketleague_ml.core.actor import Actor
-from rocketleague_ml.core.car import Car, Car_Component
-from rocketleague_ml.core.camera_settings import CameraSettings
-
-
-class Player_Component(Car_Component):
-    def __init__(self, player_component: Actor):
-        super().__init__(player_component)
+from rocketleague_ml.core.car import Car
+from rocketleague_ml.core.camera_settings import Camera_Settings
 
 
 class Player(Actor):
@@ -19,84 +14,38 @@ class Player(Actor):
         self.team: str | None = None
         self.steering_sensitivity: float | None = None
         self.score: int = 0
-        self.camera_settings: CameraSettings | None = None
+        self.camera_settings: Camera_Settings | None = None
         self.components = []
 
     @property
-    def car(self) -> Car | None:
-        return self._car
+    def car(self) -> Car:
+        c = self._car
+        if c is None:
+            raise ValueError("Car not assigned")
+        return c
 
-    def assign_car(self, cars: List[Car], player_car_connections: List[Actor]):
-        for connection in player_car_connections:
-            if not self.owns(connection):
-                continue
+    def assign_car(self, car: Car):
+        if not self._car:
+            self._car = car
+            car.player = self
+            return None
 
-            for car in cars:
-                if car.is_self(connection) and not self._car:
-                    self._car = car
-                    break
-                if car.is_self(connection) and self._car:
-                    self._car.actor_id = car.actor_id
-                    self._car.update_component_connections()
-                    break
+        self._car.actor_id = car.actor_id
+        self._car.update_component_connections()
 
-    def assign_team(
-        self,
-        teams: List[Player_Component],
-        player_team_connections: List[Player_Component],
-    ):
-        for connection in player_team_connections:
-            if not self.is_self(connection):
-                continue
-
-            for team in teams:
-                if team.owns(connection):
-                    self.team = team.secondary_category
-                    break
-
-    def assign_camera_settings(
-        self, camera_settings: List[Actor], camera_settings_connections: List[Actor]
-    ):
-        for camera_setting in camera_settings_connections:
-            if self.owns(camera_setting):
-                self.camera_settings = CameraSettings(camera_setting)
-                break
-
+    def assign_camera_settings(self, camera_settings: Actor):
         if not self.camera_settings:
-            raise ValueError("Failed to assign camera settings to player {self.name}")
+            self.camera_settings = Camera_Settings(camera_settings, self)
+        else:
+            self.camera_settings.update_settings(camera_settings)
+        return None
 
-        for camera_setting in camera_settings:
-            if self.camera_settings.is_self(camera_setting):
-                self.camera_settings.update_settings(camera_setting)
-
-    def update_camera_settings(self, camera_settings: List[Actor]):
+    def update_camera_settings(self, camera_settings: Actor):
         if not self.camera_settings:
-            return
-        for camera_setting in camera_settings:
-            if self.camera_settings.is_self(camera_setting):
-                self.camera_settings.update_settings(camera_setting)
-
-    def update_components(self, player_components: List[Player_Component]):
-        skip_objects = [
-            "TAGame.PRI_TA:ViralItemActor",
-            "TAGame.PRI_TA:SpectatorShortcut",
-            "TAGame.PRI_TA:Title",
-            "TAGame.PRI_TA:PartyLeader",
-            "TAGame.PRI_TA:ClientLoadoutsOnline",
-            "TAGame.PRI_TA:ClientLoadouts",
-            "TAGame.PRI_TA:PersistentCamera",
-        ]
-        for pc in player_components:
-            player_component = Player_Component(pc)
-            if player_component.object in skip_objects or not self.owns(
-                player_component
-            ):
-                continue
-
-            if player_component.secondary_category == "steering_sensitivity":
-                self.steering_sensitivity = player_component.amount
-            elif player_component.object == "TAGame.PRI_TA:MatchScore":
-                self.score = int(player_component.amount)
+            raise ValueError(
+                f"Player does not have camera settings assigned {camera_settings.raw}"
+            )
+        self.camera_settings.update_settings(camera_settings)
 
     def to_dict(self):
         base_player = super().to_dict()
@@ -110,12 +59,3 @@ class Player(Actor):
             ),
         }
         return cast(Actor_Export, base_player | player)
-
-
-class PlayerWithCar(Player):
-    @property
-    def car(self) -> Car:
-        c = super().car
-        if c is None:
-            raise ValueError("Car not assigned")
-        return c

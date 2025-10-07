@@ -13,7 +13,6 @@ from rocketleague_ml.types.attributes import (
     Labeled_Stat_Event_Attribute,
     Labeled_Raw_Actor,
     Raw_Actor,
-    Raw_Frame,
     Rigid_Body_Positioning,
     Time_Labeled_Rigid_Body_Positioning,
     Active_Actor_Attribute,
@@ -24,6 +23,7 @@ from rocketleague_ml.core.positioning import Positioning
 class Actor:
     def __init__(self, actor: Raw_Actor, objects: Dict[int, str]):
         self.raw = actor
+        self.attribute = actor.get("attribute")
         self.actor_id = actor["actor_id"]
         self.active_actor_id = None
         self.positioning = None
@@ -125,28 +125,16 @@ class Actor:
     def owns(self, possible_child: Actor):
         return self.actor_id == possible_child.active_actor_id
 
-    def update_position(
-        self, updated_actor: Actor, active_game: bool, frame: Raw_Frame, round: int
-    ):
+    def update_position(self, updated_actor: Actor):
         if not updated_actor.positioning:
             raise ValueError(
-                "Positoning not found when updating position for {self.actor_id}: {updated_actor.raw}"
+                f"Positoning not found when updating position for {self.actor_id}: {updated_actor.raw}"
             )
         updated_actor.positioning.previous_linear_velocity = (
             self.positioning.linear_velocity if self.positioning else None
         )
         self.positioning = updated_actor.positioning.copy()
-        if active_game:
-            if round not in self.updates_by_round:
-                self.updates_by_round[round] = []
-            time_labeled_positioning = cast(
-                Time_Labeled_Rigid_Body_Positioning, updated_actor.positioning.to_dict()
-            )
-            time_labeled_positioning["round"] = round
-            time_labeled_positioning["time"] = frame["time"]
-            time_labeled_positioning["match_time"] = frame["match_time"]
-            time_labeled_positioning["delta"] = frame["delta"]
-            self.updates_by_round[round].append(time_labeled_positioning)
+        return None
 
     def to_dict(self) -> Actor_Export:
         return {

@@ -1,0 +1,59 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any, Dict
+from rocketleague_ml.core.actor import Actor
+from rocketleague_ml.types.attributes import Raw_Frame
+
+if TYPE_CHECKING:
+    from rocketleague_ml.core.game import Game
+
+
+class Frame:
+    def __init__(self, raw_frame: Raw_Frame, game: Game):
+        self.raw = raw_frame
+        self.time = raw_frame["time"]
+        self.delta = raw_frame["delta"]
+        self.new_actors = raw_frame["new_actors"]
+        self.updated_actors = raw_frame["updated_actors"]
+        self.deleted_actors = raw_frame["deleted_actors"]
+
+        self.processed_fields: Dict[str, Any] = {}
+        self.processed_new_actors: Dict[int, Actor] = {}
+        self.processed_updated_actors: Dict[int, Actor] = {}
+
+        self.resync = len(self.new_actors) + len(self.updated_actors) > 80
+        self.game = game
+
+        self.calculate_match_time()
+        return None
+
+    def set_values_from_previous(self):
+        self.processed_fields = self.game.previous_frame.processed_fields
+
+    def calculate_match_time(self):
+        self.round = self.game.round
+        self.active = self.game.active
+        self.match_time_remaining = self.game.match_time_remaining
+        self.in_overtime = self.game.in_overtime
+        self.overtime_elapsed = self.game.overtime_elapsed
+
+        if self.active and not self.in_overtime:
+            new_match_time_remaining = max(0.0, self.match_time_remaining - self.delta)
+            self.match_time_remaining = new_match_time_remaining
+            self.game.match_time_remaining = new_match_time_remaining
+
+        elif self.active and self.in_overtime:
+            new_overtime_elapsed = self.overtime_elapsed + self.delta
+            self.overtime_elapsed = new_overtime_elapsed
+            self.game.overtime_elapsed = new_overtime_elapsed
+
+        if not self.in_overtime:
+            mins, secs = divmod(int(self.match_time_remaining), 60)
+            self.match_time_label = f"{mins}:{secs:02d}"
+        else:
+            mins, secs = divmod(int(self.overtime_elapsed), 60)
+            self.match_time_label = f"+{mins}:{secs:02d}"
+
+        return None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"time": self.time}

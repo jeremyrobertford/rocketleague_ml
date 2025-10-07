@@ -1,9 +1,0 @@
-from rocketleague_ml.core.game import Game
-from rocketleague_ml.types.attributes import Raw_Game_Data
-
-
-def process_game(game_data: Raw_Game_Data):
-    game = Game(game_data)
-    for f, frame in enumerate(game.frames):
-        game.analyze_frame(frame, f)
-    return game
