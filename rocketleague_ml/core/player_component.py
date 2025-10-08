@@ -15,16 +15,15 @@ class Player_Component(Actor):
         self.amount = 0
         self.active = False
 
+        if "Int" in attribute:
+            self.amount = attribute["Int"]
+            return None
         if "Float" in attribute:
             self.amount = attribute["Float"]
             return None
         if "Byte" in attribute:
             self.amount = convert_byte_to_float(attribute["Byte"])
-            return None
-
-        activeByte: int | None = attribute.get("Byte")
-        if activeByte is not None:
-            self.active = activeByte == 3
+            self.active = attribute["Byte"] == 3
             return None
 
         active: bool | None = attribute.get("Boolean")

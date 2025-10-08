@@ -15,13 +15,13 @@ def main():
     pipeline.processor.config(
         include_ball_positioning=False,
         include_car_positioning=False,
-        include_simple_vision=True,
+        include_simple_vision=False,
         include_advanced_vision=False,
         include_movement=False,
         include_player_demos=False,
-        include_boost_management=True,
+        include_boost_management=False,
+        include_scoreboard_metrics=True,
         # not developed yet
-        include_scoreboard_metrics=False,
         include_ball_collisions=False,
         include_player_collisions=False,
         include_custom_scoreboard_metrics=False,

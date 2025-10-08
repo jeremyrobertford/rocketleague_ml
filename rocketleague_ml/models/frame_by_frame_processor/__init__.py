@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import cast, Any, Dict, List
+from typing import Any, Dict, List
 import pandas as pd
 from rocketleague_ml.config import PREPROCESSED, PROCESSED, WRANGLED
 from rocketleague_ml.core.actor import Actor
@@ -8,14 +8,10 @@ from rocketleague_ml.core.rigid_body import Rigid_Body
 from rocketleague_ml.core.game import Game
 from rocketleague_ml.core.frame import Frame
 from rocketleague_ml.models.rrrocket_json_preprocessor import RRRocket_JSON_Preprocessor
-from rocketleague_ml.utils.helpers import parse_boost_actor_name
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.types.attributes import (
     Raw_Game_Data,
     Raw_Frame,
-    Boolean_Attribute,
-    Demolish_Extended_Attribute,
-    Pickup_New_Attribute,
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors import processors
 from rocketleague_ml.models.game_data_wrangler import Game_Data_Wrangler
@@ -223,7 +219,6 @@ class Frame_By_Frame_Processor:
 
         match attribute_key:
             case "Boolean":
-                attribute = cast(Boolean_Attribute, updated_actor.attribute)
                 ignore_objects = {
                     "ProjectX.GRI_X:bGameStarted",
                     "Engine.Actor:bBlockActors",
@@ -238,193 +233,11 @@ class Frame_By_Frame_Processor:
                 ):
                     return None
                 raise ValueError(f"Actor activity not updated {updated_actor.raw}")
-            case "RigidBody":
-                updated_actor = Rigid_Body(updated_actor, "")
-                ball = (
-                    frame.game.ball if frame.game.ball.is_self(updated_actor) else None
-                )
-                if ball:
-                    if self.include_ball_positioning:
-                        field_label = "ball_positioning"
-                        frame.processed_fields[field_label + "_sleeping"] = (
-                            updated_actor.positioning.sleeping
-                        )
-                        frame.processed_fields[field_label + "_x"] = (
-                            updated_actor.positioning.location.x
-                        )
-                        frame.processed_fields[field_label + "_y"] = (
-                            updated_actor.positioning.location.y
-                        )
-                        frame.processed_fields[field_label + "_z"] = (
-                            updated_actor.positioning.location.z
-                        )
-                        frame.processed_fields[field_label + "_rotation_x"] = (
-                            updated_actor.positioning.rotation.x
-                        )
-                        frame.processed_fields[field_label + "_rotation_y"] = (
-                            updated_actor.positioning.rotation.y
-                        )
-                        frame.processed_fields[field_label + "_rotation_z"] = (
-                            updated_actor.positioning.rotation.z
-                        )
-                        frame.processed_fields[field_label + "_rotation_w"] = (
-                            updated_actor.positioning.rotation.w
-                        )
-                        frame.processed_fields[field_label + "_linear_velocity_x"] = (
-                            updated_actor.positioning.linear_velocity.x
-                        )
-                        frame.processed_fields[field_label + "_linear_velocity_y"] = (
-                            updated_actor.positioning.linear_velocity.y
-                        )
-                        frame.processed_fields[field_label + "_linear_velocity_z"] = (
-                            updated_actor.positioning.linear_velocity.z
-                        )
-                        frame.processed_fields[field_label + "_angular_velocity_x"] = (
-                            updated_actor.positioning.angular_velocity.x
-                        )
-                        frame.processed_fields[field_label + "_angular_velocity_y"] = (
-                            updated_actor.positioning.angular_velocity.y
-                        )
-                        frame.processed_fields[field_label + "_angular_velocity_z"] = (
-                            updated_actor.positioning.angular_velocity.z
-                        )
-                    ball.update_position(updated_actor)
-                    return None
-
-                car = frame.game.cars.get(updated_actor.actor_id)
-                if car:
-                    if self.include_car_positioning:
-                        field_label = f"{car.player.name}_positioning"
-                        frame.processed_fields[field_label + "_sleeping"] = (
-                            updated_actor.positioning.sleeping
-                        )
-                        frame.processed_fields[field_label + "_x"] = (
-                            updated_actor.positioning.location.x
-                        )
-                        frame.processed_fields[field_label + "_y"] = (
-                            updated_actor.positioning.location.y
-                        )
-                        frame.processed_fields[field_label + "_z"] = (
-                            updated_actor.positioning.location.z
-                        )
-                        frame.processed_fields[field_label + "_rotation_x"] = (
-                            updated_actor.positioning.rotation.x
-                        )
-                        frame.processed_fields[field_label + "_rotation_y"] = (
-                            updated_actor.positioning.rotation.y
-                        )
-                        frame.processed_fields[field_label + "_rotation_z"] = (
-                            updated_actor.positioning.rotation.z
-                        )
-                        frame.processed_fields[field_label + "_rotation_w"] = (
-                            updated_actor.positioning.rotation.w
-                        )
-                        frame.processed_fields[field_label + "_linear_velocity_x"] = (
-                            updated_actor.positioning.linear_velocity.x
-                        )
-                        frame.processed_fields[field_label + "_linear_velocity_y"] = (
-                            updated_actor.positioning.linear_velocity.y
-                        )
-                        frame.processed_fields[field_label + "_linear_velocity_z"] = (
-                            updated_actor.positioning.linear_velocity.z
-                        )
-                        frame.processed_fields[field_label + "_angular_velocity_x"] = (
-                            updated_actor.positioning.angular_velocity.x
-                        )
-                        frame.processed_fields[field_label + "_angular_velocity_y"] = (
-                            updated_actor.positioning.angular_velocity.y
-                        )
-                        frame.processed_fields[field_label + "_angular_velocity_z"] = (
-                            updated_actor.positioning.angular_velocity.z
-                        )
-                    car.update_position(updated_actor)
-                    return None
-
-                boost_actor = frame.game.boost_pads.get(updated_actor.actor_id)
-                if boost_actor:
-                    boost_actor.update_position(updated_actor)
-                    return None
-
-                frame.add_updated_actor_to_disconnected_car_component_updates(
-                    updated_actor
-                )
-            case "DemolishExtended":
-                attribute = cast(Demolish_Extended_Attribute, updated_actor.attribute)
-                demolition = attribute["DemolishExtended"]
-                attacker_car_actor_id = demolition["attacker"]["actor"]
-                victim_car_actor_id = demolition["victim"]["actor"]
-                if (
-                    attacker_car_actor_id not in frame.game.cars
-                    or victim_car_actor_id not in frame.game.cars
-                ):
-                    frame.add_updated_actor_to_disconnected_car_component_updates(
-                        updated_actor
-                    )
-                    return None
-                attacker_car = frame.game.cars[attacker_car_actor_id]
-                victim_car = frame.game.cars[victim_car_actor_id]
-                if not attacker_car:
-                    raise ValueError(
-                        f"No matching attacker car in demo actor {updated_actor.raw}"
-                    )
-                if not victim_car:
-                    raise ValueError(
-                        f"No matching victim car in demo actor {updated_actor.raw}"
-                    )
-                if self.include_player_demos:
-                    field_label = f"{attacker_car.player.name}_demo"
-                    frame.processed_fields[field_label + "_x"] = demolition[
-                        "attacker_velocity"
-                    ]["x"]
-                    frame.processed_fields[field_label + "_y"] = demolition[
-                        "attacker_velocity"
-                    ]["y"]
-                    frame.processed_fields[field_label + "_z"] = demolition[
-                        "attacker_velocity"
-                    ]["z"]
-                    field_label = f"{victim_car.player.name}_demod"
-                    frame.processed_fields[field_label + "_x"] = demolition[
-                        "victim_velocity"
-                    ]["x"]
-                    frame.processed_fields[field_label + "_y"] = demolition[
-                        "victim_velocity"
-                    ]["y"]
-                    frame.processed_fields[field_label + "_z"] = demolition[
-                        "victim_velocity"
-                    ]["z"]
-                return None
-            case "PickupNew":
-                boost_pickup = cast(Pickup_New_Attribute, updated_actor.attribute)
-                boost_actor = frame.game.boost_pads[updated_actor.actor_id]
-                if not boost_actor:
-                    raise ValueError(
-                        f"Cannot find boost actor {updated_actor.actor_id}"
-                    )
-                boost_data = parse_boost_actor_name(boost_actor.object)
-                if not boost_data:
-                    # print(
-                    #     f"Cannot find boost {updated_actor.actor_id}, {boost_actor.object}"
-                    # )
-                    # raise ValueError(
-                    #     f"Boost data not found for boost actor {boost_actor.object}"
-                    # )
-                    return None
-                if (
-                    not boost_pickup["PickupNew"]["instigator"]
-                    or boost_pickup["PickupNew"]["instigator"] == -1
-                ):
-                    # print(f"Null boost pickup {updated_actor.raw}")
-                    return None
-                car = frame.game.cars[boost_pickup["PickupNew"]["instigator"]]
-                if self.include_boost_management:
-                    field_label = f"{car.player.name}_boost_pickup"
-                    frame.processed_fields[field_label + "_x"] = boost_data[0]
-                    frame.processed_fields[field_label + "_y"] = boost_data[1]
-                    frame.processed_fields[field_label + "_z"] = boost_data[2]
-                    frame.processed_fields[field_label + "_amount"] = boost_data[3]
-                return None
             case _:
                 pass
+
+        if not updated_actor.secondary_category:
+            pass
 
         return None
 

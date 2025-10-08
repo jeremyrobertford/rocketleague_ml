@@ -15,6 +15,11 @@ from rocketleague_ml.models.frame_by_frame_processor.processors.camera_settings 
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors.player_components import (
     process_player_team,
+    process_player_assisted,
+    process_player_scored,
+    process_player_saved,
+    process_player_gained_points,
+    process_player_shot,
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors.events import (
     process_game_start,
@@ -35,7 +40,7 @@ if TYPE_CHECKING:
 
 processors: Dict[str, Callable[[Frame_By_Frame_Processor, Actor, Frame], None]] = {
     "camera_settings.camera_settings": process_camera_settings,
-    "camera_settings.fov": process_camera_settings_swivel,
+    "camera_settings.yaw": process_camera_settings_swivel,
     "camera_settings.pitch": process_camera_settings_swivel,
     "camera_settings.car_cam": process_camera_settings_activate,
     "camera_settings.rear_cam": process_camera_settings_activate,
@@ -53,4 +58,9 @@ processors: Dict[str, Callable[[Frame_By_Frame_Processor, Actor, Frame], None]] 
     "car": process_car_position,
     "player_demo": process_demo,
     "boost_pickup": process_boost_pickup,
+    "player_component.assists": process_player_assisted,
+    "player_component.saves": process_player_saved,
+    "player_component.score": process_player_gained_points,
+    "player_component.shots": process_player_shot,
+    "player_component.goals": process_player_scored,
 }

@@ -42,6 +42,11 @@ class Frame:
             "demo",
             "demod",
             "boost_pickup",
+            "score",
+            "shot",
+            "save",
+            "assist",
+            "goal",
         ]
         for key, value in self.game.previous_frame.processed_fields.items():
             ignore = False
