@@ -1,4 +1,5 @@
 import os
+from typing import Any, Dict
 
 LOG = True
 
@@ -143,4 +144,409 @@ BOOST_PAD_MAP = {
     28: (940.0, 3308.0, 70.0, 12),
     29: (-3072.0, 4096.0, 73.0, 100),  # big
     30: (3072.0, 4096.0, 73.0, 100),  # big
+}
+
+
+DTYPES: Dict[str, Any] = {
+    "float": float,
+    "int": int,
+    "str": str,
+}
+
+FEATURE_LABELS = {
+    "id": {
+        "dtype": "str",
+        "description": "Unique identifier for the game or round",
+        "concept": "metadata",
+    },
+    "round": {
+        "dtype": "int",
+        "description": "Round number within the game",
+        "concept": "metadata",
+    },
+    # Ball proximity
+    "Percent Time while Closest to Ball": {
+        "dtype": "float",
+        "description": "Percentage of time the player was the closest to the ball",
+        "concept": "ball_proximity",
+    },
+    "Average Stint while Closest to Ball": {
+        "dtype": "float",
+        "description": "Average continuous time spent closest to the ball",
+        "concept": "ball_proximity",
+    },
+    "Percent Time while Farthest from Ball": {
+        "dtype": "float",
+        "description": "Percentage of time the player was the farthest from the ball",
+        "concept": "ball_proximity",
+    },
+    "Average Stint while Farthest from Ball": {
+        "dtype": "float",
+        "description": "Average continuous time spent farthest from the ball",
+        "concept": "ball_proximity",
+    },
+    "Average Distance to Ball": {
+        "dtype": "float",
+        "description": "Mean distance from the ball during gameplay",
+        "concept": "ball_proximity",
+    },
+    # Player spacing
+    "Average Distance to Teammates": {
+        "dtype": "float",
+        "description": "Average distance to teammates during gameplay",
+        "concept": "positioning",
+    },
+    "Average Distance to Opponents": {
+        "dtype": "float",
+        "description": "Average distance to opponents during gameplay",
+        "concept": "positioning",
+    },
+    # Field halves
+    "Percent Time In Offensive Half": {
+        "dtype": "float",
+        "description": "Percent of time spent in the offensive half of the field",
+        "concept": "positioning",
+    },
+    "Average Stint In Offensive Half": {
+        "dtype": "float",
+        "description": "Average continuous time spent in the offensive half",
+        "concept": "positioning",
+    },
+    "Percent Time In Defensive Half": {
+        "dtype": "float",
+        "description": "Percent of time spent in the defensive half of the field",
+        "concept": "positioning",
+    },
+    "Average Stint In Defensive Half": {
+        "dtype": "float",
+        "description": "Average continuous time spent in the defensive half",
+        "concept": "positioning",
+    },
+    "Percent Time In Left Half": {
+        "dtype": "float",
+        "description": "Percent of time spent in the left half of the field",
+        "concept": "positioning",
+    },
+    "Average Stint In Left Half": {
+        "dtype": "float",
+        "description": "Average continuous time spent in the left half",
+        "concept": "positioning",
+    },
+    "Percent Time In Right Half": {
+        "dtype": "float",
+        "description": "Percent of time spent in the right half of the field",
+        "concept": "positioning",
+    },
+    "Average Stint In Right Half": {
+        "dtype": "float",
+        "description": "Average continuous time spent in the right half",
+        "concept": "positioning",
+    },
+    "Percent Time In Highest Half": {
+        "dtype": "float",
+        "description": "Percent of time spent in the upper half of the field (Z-axis)",
+        "concept": "positioning",
+    },
+    "Average Stint In Highest Half": {
+        "dtype": "float",
+        "description": "Average continuous time spent in the upper half",
+        "concept": "positioning",
+    },
+    "Percent Time In Lowest Half": {
+        "dtype": "float",
+        "description": "Percent of time spent in the lower half of the field (Z-axis)",
+        "concept": "positioning",
+    },
+    "Average Stint In Lowest Half": {
+        "dtype": "float",
+        "description": "Average continuous time spent in the lower half",
+        "concept": "positioning",
+    },
+    # Field thirds
+    "Percent Time In Offensive Third": {
+        "dtype": "float",
+        "description": "Percent of time spent in offensive third of the field",
+        "concept": "positioning",
+    },
+    "Average Stint In Offensive Third": {
+        "dtype": "float",
+        "description": "Average continuous time spent in offensive third",
+        "concept": "positioning",
+    },
+    "Percent Time In Neutral Third": {
+        "dtype": "float",
+        "description": "Percent of time spent in neutral (middle) third",
+        "concept": "positioning",
+    },
+    "Average Stint In Neutral Third": {
+        "dtype": "float",
+        "description": "Average continuous time spent in neutral third",
+        "concept": "positioning",
+    },
+    "Percent Time In Defensive Third": {
+        "dtype": "float",
+        "description": "Percent of time spent in defensive third",
+        "concept": "positioning",
+    },
+    "Average Stint In Defensive Third": {
+        "dtype": "float",
+        "description": "Average continuous time spent in defensive third",
+        "concept": "positioning",
+    },
+    # Left/Right thirds
+    "Percent Time In Left Third": {
+        "dtype": "float",
+        "description": "Percent of time spent in left third of the field",
+        "concept": "positioning",
+    },
+    "Average Stint In Left Third": {
+        "dtype": "float",
+        "description": "Average continuous time spent in left third",
+        "concept": "positioning",
+    },
+    "Percent Time In Middle Third": {
+        "dtype": "float",
+        "description": "Percent of time spent in middle third of the field",
+        "concept": "positioning",
+    },
+    "Average Stint In Middle Third": {
+        "dtype": "float",
+        "description": "Average continuous time spent in middle third",
+        "concept": "positioning",
+    },
+    "Percent Time In Right Third": {
+        "dtype": "float",
+        "description": "Percent of time spent in right third of the field",
+        "concept": "positioning",
+    },
+    "Average Stint In Right Third": {
+        "dtype": "float",
+        "description": "Average continuous time spent in right third",
+        "concept": "positioning",
+    },
+    # Aerial thirds
+    "Percent Time In Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time spent in highest vertical third",
+        "concept": "positioning",
+    },
+    "Average Stint In Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time spent in highest vertical third",
+        "concept": "positioning",
+    },
+    "Percent Time In Middle Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in middle vertical third",
+        "concept": "positioning",
+    },
+    "Average Stint In Middle Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in middle vertical third",
+        "concept": "positioning",
+    },
+    "Percent Time In Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in lowest vertical third",
+        "concept": "positioning",
+    },
+    "Average Stint In Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in lowest vertical third",
+        "concept": "positioning",
+    },
+    # Ball orientation
+    "Percent Time In Front of Ball": {
+        "dtype": "float",
+        "description": "Percent of time in front of ball relative to goal",
+        "concept": "orientation",
+    },
+    "Average Stint In Front of Ball": {
+        "dtype": "float",
+        "description": "Average continuous time spent in front of the ball",
+        "concept": "orientation",
+    },
+    "Percent Time Behind Ball": {
+        "dtype": "float",
+        "description": "Percent of time behind the ball relative to goal",
+        "concept": "orientation",
+    },
+    "Average Stint Behind Ball": {
+        "dtype": "float",
+        "description": "Average continuous time spent behind the ball",
+        "concept": "orientation",
+    },
+    # Speed states
+    "Percent Time while Stationary": {
+        "dtype": "float",
+        "description": "Percent of time the player was stationary",
+        "concept": "speed",
+    },
+    "Average Stint while Stationary": {
+        "dtype": "float",
+        "description": "Average continuous time spent stationary",
+        "concept": "speed",
+    },
+    "Percent Time while Slow": {
+        "dtype": "float",
+        "description": "Percent of time moving at slow speed",
+        "concept": "speed",
+    },
+    "Average Stint while Slow": {
+        "dtype": "float",
+        "description": "Average continuous time at slow speed",
+        "concept": "speed",
+    },
+    "Percent Time while Semi-Slow": {
+        "dtype": "float",
+        "description": "Percent of time moving at semi-slow speed",
+        "concept": "speed",
+    },
+    "Average Stint while Semi-Slow": {
+        "dtype": "float",
+        "description": "Average continuous time at semi-slow speed",
+        "concept": "speed",
+    },
+    "Percent Time while Medium Speed": {
+        "dtype": "float",
+        "description": "Percent of time moving at medium speed",
+        "concept": "speed",
+    },
+    "Average Stint while Medium Speed": {
+        "dtype": "float",
+        "description": "Average continuous time at medium speed",
+        "concept": "speed",
+    },
+    "Percent Time while Semi-Fast": {
+        "dtype": "float",
+        "description": "Percent of time moving at semi-fast speed",
+        "concept": "speed",
+    },
+    "Average Stint while Semi-Fast": {
+        "dtype": "float",
+        "description": "Average continuous time at semi-fast speed",
+        "concept": "speed",
+    },
+    "Percent Time while Drive Speed": {
+        "dtype": "float",
+        "description": "Percent of time moving at standard drive speed",
+        "concept": "speed",
+    },
+    "Average Stint while Drive Speed": {
+        "dtype": "float",
+        "description": "Average continuous time at drive speed",
+        "concept": "speed",
+    },
+    "Percent Time while Boost Speed": {
+        "dtype": "float",
+        "description": "Percent of time moving at boosted speed",
+        "concept": "speed",
+    },
+    "Average Stint while Boost Speed": {
+        "dtype": "float",
+        "description": "Average continuous time at boosted speed",
+        "concept": "speed",
+    },
+    "Percent Time while Supersonic": {
+        "dtype": "float",
+        "description": "Percent of time moving at supersonic speed",
+        "concept": "speed",
+    },
+    "Average Stint while Supersonic": {
+        "dtype": "float",
+        "description": "Average continuous time at supersonic speed",
+        "concept": "speed",
+    },
+    # Movement state
+    "Percent Time Grounded": {
+        "dtype": "float",
+        "description": "Percent of time on the ground",
+        "concept": "movement_state",
+    },
+    "Average Stint Grounded": {
+        "dtype": "float",
+        "description": "Average continuous time on the ground",
+        "concept": "movement_state",
+    },
+    "Percent Time Airborne": {
+        "dtype": "float",
+        "description": "Percent of time in the air",
+        "concept": "movement_state",
+    },
+    "Average Stint Airborne": {
+        "dtype": "float",
+        "description": "Average continuous time airborne",
+        "concept": "movement_state",
+    },
+    "Percent Time On Ceiling": {
+        "dtype": "float",
+        "description": "Percent of time on the ceiling",
+        "concept": "movement_state",
+    },
+    "Average Stint On Ceiling": {
+        "dtype": "float",
+        "description": "Average continuous time on ceiling",
+        "concept": "movement_state",
+    },
+    "Percent Time On Left Wall": {
+        "dtype": "float",
+        "description": "Percent of time on left wall",
+        "concept": "movement_state",
+    },
+    "Average Stint On Left Wall": {
+        "dtype": "float",
+        "description": "Average continuous time on left wall",
+        "concept": "movement_state",
+    },
+    "Percent Time On Right Wall": {
+        "dtype": "float",
+        "description": "Percent of time on right wall",
+        "concept": "movement_state",
+    },
+    "Average Stint On Right Wall": {
+        "dtype": "float",
+        "description": "Average continuous time on right wall",
+        "concept": "movement_state",
+    },
+    "Percent Time On Back Wall": {
+        "dtype": "float",
+        "description": "Percent of time on back wall",
+        "concept": "movement_state",
+    },
+    "Average Stint On Back Wall": {
+        "dtype": "float",
+        "description": "Average continuous time on back wall",
+        "concept": "movement_state",
+    },
+    "Percent Time On Front Wall": {
+        "dtype": "float",
+        "description": "Percent of time on front wall",
+        "concept": "movement_state",
+    },
+    "Average Stint On Front Wall": {
+        "dtype": "float",
+        "description": "Average continuous time on front wall",
+        "concept": "movement_state",
+    },
+    # Goal areas
+    "Percent Time In Own Goal": {
+        "dtype": "float",
+        "description": "Percent of time in own goal area",
+        "concept": "positioning",
+    },
+    "Average Stint In Own Goal": {
+        "dtype": "float",
+        "description": "Average continuous time in own goal area",
+        "concept": "positioning",
+    },
+    "Percent Time In Opponents Goal": {
+        "dtype": "float",
+        "description": "Percent of time in opponent's goal area",
+        "concept": "positioning",
+    },
+    "Average Stint In Opponents Goal": {
+        "dtype": "float",
+        "description": "Average continuous time in opponent's goal area",
+        "concept": "positioning",
+    },
 }

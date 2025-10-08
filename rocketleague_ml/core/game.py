@@ -56,7 +56,7 @@ class Game:
         return b
 
     def connect_disconnected_car_component(self, connection: Actor):
-        if not connection.active_actor_id:
+        if connection.active_actor_id is None:
             raise ValueError(
                 f"Connecting disconnected car components requires active actor id {connection.raw}"
             )
@@ -84,7 +84,7 @@ class Game:
         return None
 
     def connect_disconnected_player_car(self, connection: Actor):
-        if not connection.active_actor_id:
+        if connection.active_actor_id is None:
             raise ValueError(
                 f"Connecting disconnected cars requires active actor id {connection.raw}"
             )
@@ -190,13 +190,13 @@ class Game:
                 case "player":
                     players[updated_actor.actor_id] = Player(updated_actor)
                 case "car_to_player":
-                    if not updated_actor.active_actor_id:
+                    if updated_actor.active_actor_id is None:
                         raise ValueError(
                             f"Car to player does not have active actor {updated_actor.raw}"
                         )
                     player_cars[updated_actor.actor_id] = updated_actor.active_actor_id
                 case "vehicle":
-                    if not updated_actor.active_actor_id:
+                    if updated_actor.active_actor_id is None:
                         raise ValueError(
                             f"Component to car does not have active actor {updated_actor.raw}"
                         )
@@ -204,7 +204,7 @@ class Game:
                         updated_actor.active_actor_id
                     )
                 case "settings_to_player":
-                    if not updated_actor.active_actor_id:
+                    if updated_actor.active_actor_id is None:
                         raise ValueError(
                             f"Camera settings to player does not have active actor {updated_actor.raw}"
                         )
@@ -216,7 +216,7 @@ class Game:
                         unhandled_updated_actors[updated_actor.actor_id] = updated_actor
                         continue
 
-                    if not updated_actor.active_actor_id:
+                    if updated_actor.active_actor_id is None:
                         raise ValueError(
                             f"Player component to player does not have active actor {updated_actor.raw}"
                         )

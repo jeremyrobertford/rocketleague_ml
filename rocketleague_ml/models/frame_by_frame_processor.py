@@ -7,7 +7,7 @@ from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.game import Game
 from rocketleague_ml.core.frame import Frame
 from rocketleague_ml.core.car import Car_Component, Boost_Car_Component
-from rocketleague_ml.core.rrrocket_json_preprocessor import RRRocket_JSON_Preprocessor
+from rocketleague_ml.models.rrrocket_json_preprocessor import RRRocket_JSON_Preprocessor
 from rocketleague_ml.utils.helpers import parse_boost_actor_name
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.types.attributes import (
@@ -376,7 +376,7 @@ class Frame_By_Frame_Processor:
 
         match updated_actor.secondary_category:
             case "team":
-                if not updated_actor.active_actor_id:
+                if updated_actor.active_actor_id is None:
                     raise ValueError(
                         f"Team assignment must come with active actor {updated_actor.raw}"
                     )
@@ -835,10 +835,10 @@ class Frame_By_Frame_Processor:
                     self.logger.print(f"  {type(e).__name__}: {e}")
                     self.failed += 1
 
-        self.logger.print()
         self.logger.print(
             f"Done. succeeded={self.succeeded}, skipped={self.skipped}, failed={self.failed}."
         )
-        self.logger.print(f"Saved processed games to: {PROCESSED}")
+        if save_output and self.succeeded:
+            self.logger.print(f"Saved processed games to: {PROCESSED}")
         self.logger.print()
         return None

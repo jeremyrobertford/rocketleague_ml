@@ -217,10 +217,10 @@ class RRRocket_JSON_Preprocessor:
                 self.logger.print(f"  {type(e).__name__}: {e}")
                 self.failed += 1
 
-        self.logger.print()
         self.logger.print(
             f"Done. succeeded={self.succeeded}, skipped={self.skipped}, failed={self.failed}."
         )
-        self.logger.print(f"Saved JSON to: {PREPROCESSED}")
+        if save_output and self.succeeded:
+            self.logger.print(f"Saved JSON to: {PREPROCESSED}")
         self.logger.print()
         return games if not save_output else None

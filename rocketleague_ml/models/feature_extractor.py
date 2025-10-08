@@ -6,11 +6,13 @@ from typing import cast, Any, Dict, List, Union
 import pandas as pd
 import numpy as np
 from numpy.typing import NDArray
-from rocketleague_ml.core.frame_by_frame_processor import Frame_By_Frame_Processor
+from rocketleague_ml.models.frame_by_frame_processor import Frame_By_Frame_Processor
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.config import (
-    PROCESSED,
+    DTYPES,
+    FEATURE_LABELS,
     FEATURES,
+    PROCESSED,
     FIELD_Y,
     Z_GROUND,
     Z_CEILING,
@@ -219,8 +221,9 @@ class Rocket_League_Feature_Extractor:
 
         # average stint duration
         avg_stint = stint_durations.mean() if not stint_durations.empty else 0
+        perc_avg_stint = avg_stint / total_time if total_time > 0 else 0
 
-        return perc_in_position, avg_stint
+        return perc_in_position, perc_avg_stint
 
     def extract_round_features(
         self,
@@ -639,7 +642,9 @@ class Rocket_League_Feature_Extractor:
         # --- Handle feature_labels.json ---
         if write_header:
             # Create JSON file with all current feature keys
-            feature_labels = list(features[0].keys())
+            feature_labels = {
+                feature: FEATURE_LABELS[feature] for feature in list(features[0].keys())
+            }
             with open(labels_path, "w", encoding="utf-8") as jf:
                 json.dump(feature_labels, jf, indent=4)
         else:
@@ -663,6 +668,22 @@ class Rocket_League_Feature_Extractor:
             writer.writerows(filtered_features)
         return None
 
+    def load_features(self):
+        features_path = os.path.join(FEATURES, "features.csv")
+        labels_path = os.path.join(FEATURES, "feature_labels.json")
+        if not os.path.exists(features_path):
+            raise FileNotFoundError("Features file does not exist.")
+        if not os.path.exists(features_path) or not os.path.exists(labels_path):
+            raise FileNotFoundError("Feature Labels file does not exist.")
+
+        with open(labels_path, "r", encoding="utf-8") as f:
+            feature_labels = json.load(f)
+        feature_dtypes: Dict[str, Any] = {
+            feature: DTYPES[meta["dtype"]] for feature, meta in feature_labels.items()
+        }
+        features = pd.read_csv(features_path, dtype=feature_dtypes)  # type: ignore
+        return features
+
     def extract_features(
         self,
         main_player: str,
@@ -670,7 +691,7 @@ class Rocket_League_Feature_Extractor:
         save_output: bool = True,
         overwrite: bool = False,
     ):
-        self.logger.print(f"Processing game data files...")
+        self.logger.print(f"Extracting features from processed game files...")
         self.succeeded = 0
         self.skipped = 0
         self.failed = 0
@@ -683,6 +704,13 @@ class Rocket_League_Feature_Extractor:
             os.remove(features_path)
         if overwrite and os.path.exists(labels_path):
             os.remove(labels_path)
+
+        if (
+            not overwrite
+            and os.path.exists(features_path)
+            and os.path.exists(labels_path)
+        ):
+            return self.load_features()
 
         if games:
             for game in games:
@@ -738,13 +766,13 @@ class Rocket_League_Feature_Extractor:
                 self.logger.print(f"  {type(e).__name__}: {e}")
                 self.failed += 1
 
-        self.logger.print()
         self.logger.print(
             f"Done. succeeded={self.succeeded}, skipped={self.skipped}, failed={self.failed}."
         )
-        self.logger.print(f"Saved features to: {FEATURES}/features.csv")
+        if save_output and self.succeeded:
+            self.logger.print(f"Saved features to: {FEATURES}/features.csv")
         self.logger.print()
 
         if save_output:
-            return features
-        return None
+            return None
+        return pd.DataFrame(features)
