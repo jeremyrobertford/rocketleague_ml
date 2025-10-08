@@ -14,9 +14,12 @@ class Rocket_League_Pipeline:
     def __init__(self, goal: str = "find_playstyle"):
         self.logger = Logger(active=True)
         self.preprocessor = RRRocket_JSON_Preprocessor(logger=self.logger)
-        self.wrangler = Game_Data_Wrangler(logger=self.logger)
+        self.wrangler = Game_Data_Wrangler(
+            preprocessor=self.preprocessor, logger=self.logger
+        )
         self.processor = Frame_By_Frame_Processor(
             preprocessor=self.preprocessor,
+            wrangler=self.wrangler,
             logger=self.logger,
         )
         self.extractor = Rocket_League_Feature_Extractor(

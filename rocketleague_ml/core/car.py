@@ -1,29 +1,28 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, cast
-from rocketleague_ml.config import ROUND_LENGTH  # type: ignore
-from rocketleague_ml.types.attributes import (
-    Actor_Export,
-)
+from typing import TYPE_CHECKING
 from rocketleague_ml.core.actor import Actor
-from rocketleague_ml.core.car_component import Car_Component, Boost_Car_Component
+from rocketleague_ml.core.rigid_body import Rigid_Body
+from rocketleague_ml.core.car_component import (
+    Simple_Car_Component,
+    Car_Component,
+    Boost_Car_Component,
+)
 
 if TYPE_CHECKING:
     from rocketleague_ml.core.player import Player
 
 
-class Car(Actor):
+class Car(Rigid_Body):
     def __init__(self, car: Actor, player: Player):
-        super().__init__(car.raw, car.objects)
-        if not self.positioning:
-            raise ValueError(f"Car failed to position {car.raw}")
+        super().__init__(car, player.name)
         self._boost: Boost_Car_Component | None = None
         self._jump: Car_Component | None = None
         self._dodge: Car_Component | None = None
         self._flip: Car_Component | None = None
         self._double_jump: Car_Component | None = None
-        self.steer: Car_Component | None = None
-        self.throttle: Car_Component | None = None
-        self.handbrake: Car_Component | None = None
+        self.steer: Simple_Car_Component | None = None
+        self.throttle: Simple_Car_Component | None = None
+        self.handbrake: Simple_Car_Component | None = None
         self.player: Player = player
 
     @property
@@ -119,17 +118,3 @@ class Car(Actor):
         if self.handbrake and self.handbrake.is_self(possible_child):
             return True
         return False
-
-    def to_dict(self):
-        base_car = super().to_dict()
-        components = {
-            "boost": self.boost.to_dict() if self.boost else None,
-            "jump": self.jump.to_dict() if self.jump else None,
-            "dodge": self.dodge.to_dict() if self.dodge else None,
-            "flip": self.flip.to_dict() if self.flip else None,
-            "double_jump": self.double_jump.to_dict() if self.double_jump else None,
-            "steer": self.steer.to_dict() if self.steer else None,
-            "throttle": self.throttle.to_dict() if self.throttle else None,
-            "handbrake": self.handbrake.to_dict() if self.handbrake else None,
-        }
-        return cast(Actor_Export, base_car | components)

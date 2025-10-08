@@ -12,7 +12,8 @@ class Camera_Settings(Actor):
         super().__init__(camera_settings.raw, camera_settings.objects)
         self.yaw: float | None = None
         self.pitch: float | None = None
-        self.car_cam: bool | None = False
+        self.car_cam: bool = False
+        self.rear_cam: bool = False
         self.fov: float | None = None
         self.height: float | None = None
         self.angle: float | None = None
@@ -47,6 +48,14 @@ class Camera_Settings(Actor):
                     "Car cam not found with boolean {updated_settings.raw}"
                 )
             self.car_cam = attribute["Boolean"]
+            return
+
+        if updated_settings.secondary_category == "rear_cam":
+            if "Boolean" not in attribute:
+                raise ValueError(
+                    "Rear cam not found with boolean {updated_settings.raw}"
+                )
+            self.rear_cam = attribute["Boolean"]
             return
 
         if updated_settings.secondary_category == "camera_settings":

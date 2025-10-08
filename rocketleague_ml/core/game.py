@@ -6,6 +6,7 @@ from rocketleague_ml.types.attributes import (
     Raw_Frame,
 )
 from rocketleague_ml.core.actor import Actor
+from rocketleague_ml.core.rigid_body import Rigid_Body
 from rocketleague_ml.core.ball import Ball
 from rocketleague_ml.core.car import Car, Boost_Car_Component, Car_Component
 from rocketleague_ml.core.camera_settings import Camera_Settings
@@ -30,7 +31,7 @@ class Game:
         self.round: int = 0
         self.rounds: Dict[int, Any] = {}
         self.players: Dict[int, Player] = {}
-        self.boost_pads: Dict[int, Actor] = {}
+        self.boost_pads: Dict[int, Rigid_Body] = {}
         self.match_time_remaining: float = ROUND_LENGTH
         self.in_overtime: bool = False
         self.overtime_elapsed: float = 0.0

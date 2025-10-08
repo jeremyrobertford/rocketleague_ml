@@ -174,15 +174,20 @@ class RRRocket_JSON_Preprocessor:
         use_game = self.replay_filter(replay_json) if self.replay_filter else False
         if use_game and save_output:
             self.save_preprocessed_file(file_name, replay_json)
+            self.logger.print("OK.")
+            self.succeeded += 1
         elif not use_game:
             self.logger.print("SKIPPED.")
             self.skipped += 1
 
-        self.logger.print("OK.")
-        self.succeeded += 1
         return cast(Raw_Game_Data, replay_json)
 
-    def convert_replays(self, save_output: bool = True, overwrite: bool = False):
+    def convert_replays(
+        self,
+        file_names: List[str] | None = None,
+        save_output: bool = True,
+        overwrite: bool = False,
+    ):
         """
         Run rrrocket on all raw replays and return a list of each parsed JSON
         as a Python dict. If save_output=True then save each parsed JSON to
@@ -198,7 +203,11 @@ class RRRocket_JSON_Preprocessor:
         self.logger.print(f"Preprocessing replay files...")
         Path(PREPROCESSED).mkdir(parents=True, exist_ok=True)
 
-        replay_files = sorted([f for f in os.listdir(RAW_REPLAYS)])
+        replay_files = (
+            sorted(file_names)
+            if file_names
+            else sorted([f for f in os.listdir(RAW_REPLAYS)])
+        )
         if not replay_files:
             print(f"No .replay files found in {RAW_REPLAYS}.")
             return

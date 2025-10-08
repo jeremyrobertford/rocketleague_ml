@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, cast, Any, Dict
+from typing import TYPE_CHECKING, cast, Any, Dict, List
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.types.attributes import Raw_Frame
 
@@ -15,6 +15,7 @@ class Frame:
         self.new_actors = raw_frame["new_actors"]
         self.updated_actors = raw_frame["updated_actors"]
         self.deleted_actors = raw_frame["deleted_actors"]
+        self.delayed_updated_actors: List[Actor] = []
 
         self.processed_fields: Dict[str, Any] = {}
         self.processed_new_actors: Dict[int, Actor] = {}
@@ -24,6 +25,16 @@ class Frame:
         self.game = game
 
         self.calculate_match_time()
+        return None
+
+    def add_updated_actor_to_disconnected_car_component_updates(
+        self, updated_actor: Actor
+    ):
+        if updated_actor.actor_id not in self.game.disconnected_car_component_updates:
+            self.game.disconnected_car_component_updates[updated_actor.actor_id] = []
+        self.game.disconnected_car_component_updates[updated_actor.actor_id].append(
+            updated_actor
+        )
         return None
 
     def set_values_from_previous(self):

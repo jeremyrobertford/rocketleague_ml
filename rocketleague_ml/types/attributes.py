@@ -194,13 +194,13 @@ class Replicated_Boost_Attribute(TypedDict):
     ReplicatedBoost: Replicated_Boost
 
 
-class Boost_Grab_Attribute(TypedDict):
-    instigator: int
+class Boost_Pickup_Attribute(TypedDict):
+    instigator: int | None
     picked_up: int
 
 
 class Pickup_New_Attribute(TypedDict):
-    PickupNew: Boost_Grab_Attribute
+    PickupNew: Boost_Pickup_Attribute
 
 
 Attribute = (

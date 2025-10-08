@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List, cast
+from typing import Dict, cast
 from rocketleague_ml.config import (
     LABELS,
     CAMERA_SETTINGS_LABELS,
@@ -7,17 +7,13 @@ from rocketleague_ml.config import (
     PLAYER_COMPONENT_LABELS,
 )
 from rocketleague_ml.types.attributes import (
-    Actor_Export,
     Labeled_Attribute,
     Labeled_Stat_Event,
     Labeled_Stat_Event_Attribute,
     Labeled_Raw_Actor,
     Raw_Actor,
-    Rigid_Body_Positioning,
-    Time_Labeled_Rigid_Body_Positioning,
     Active_Actor_Attribute,
 )
-from rocketleague_ml.core.positioning import Positioning
 
 
 class Actor:
@@ -26,17 +22,9 @@ class Actor:
         self.attribute = actor.get("attribute")
         self.actor_id = actor["actor_id"]
         self.active_actor_id = None
-        self.positioning = None
         self.objects = objects
         self.label_self()
         self.categorize_self()
-        self.updates_by_round: Dict[int, List[Time_Labeled_Rigid_Body_Positioning]] = {}
-
-        initial_trajectory = actor.get("initial_trajectory")
-        if initial_trajectory:
-            positioning = Positioning(initial_trajectory)
-            self.positioning = positioning
-
         attribute = actor.get("attribute")
         if attribute is None:
             return
@@ -44,10 +32,6 @@ class Actor:
         if active_actor:
             self.active_actor_id = active_actor["actor"]
             return
-
-        rigid_body: Rigid_Body_Positioning | None = attribute.get("RigidBody")
-        if rigid_body:
-            self.positioning = Positioning(rigid_body)
 
     @staticmethod
     def label(raw_actor: Raw_Actor, objects: Dict[int, str]):
@@ -124,20 +108,3 @@ class Actor:
 
     def owns(self, possible_child: Actor):
         return self.actor_id == possible_child.active_actor_id
-
-    def update_position(self, updated_actor: Actor):
-        if not updated_actor.positioning:
-            raise ValueError(
-                f"Positoning not found when updating position for {self.actor_id}: {updated_actor.raw}"
-            )
-        updated_actor.positioning.previous_linear_velocity = (
-            self.positioning.linear_velocity if self.positioning else None
-        )
-        self.positioning = updated_actor.positioning.copy()
-        return None
-
-    def to_dict(self) -> Actor_Export:
-        return {
-            "actor_id": self.actor_id,
-            "updates_by_round": self.updates_by_round,
-        }

@@ -38,7 +38,7 @@ def convert_euler_to_quat(
 
 def parse_boost_actor_name(object_str: str):
     try:
-        idx = int(object_str.split("_")[-1])  # grab suffix number
+        idx = int(object_str.split("_")[-1])  # pickup suffix number
     except ValueError:
         return None
 

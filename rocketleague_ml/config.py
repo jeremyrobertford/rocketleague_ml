@@ -9,6 +9,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "..", "data")
 RAW_REPLAYS = os.path.join(DATA_DIR, "raw")
 PREPROCESSED = os.path.join(DATA_DIR, "preprocessed")
+WRANGLED = os.path.join(DATA_DIR, "wrangled")
 PROCESSED = os.path.join(DATA_DIR, "processed")
 FEATURES = os.path.join(DATA_DIR, "features")
 DEFAULT_BIN_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "bin"))
@@ -45,14 +46,14 @@ CAR_COMPONENT_LABELS = {
     "TAGame.Vehicle_TA:ReplicatedSteer": "steer",
     "TAGame.Vehicle_TA:ReplicatedThrottle": "throttle",
     "TAGame.Vehicle_TA:ReplicatedHandbrake": "handbrake",
-    "TAGame.Vehicle_TA:bReplicatedHandbrake": "handbrake_active",
+    "TAGame.Vehicle_TA:bReplicatedHandbrake": "activate_handbrake",
     "TAGame.Vehicle_TA:ReplicatedJump": "rep_jump",
     "TAGame.Vehicle_TA:ReplicatedDodge": "rep_dodge",
     "TAGame.Vehicle_TA:ReplicatedBoost": "rep_boost",
     "TAGame.CarComponent_Boost_TA:ReplicatedBoost": "rep_boost",
     "TAGame.CarComponent_Boost_TA:ReplicatedBoostAmount": "rep_boost_amt",
     "TAGame.Vehicle_TA:bDriving": "driving",
-    "TAGame.CarComponent_TA:ReplicatedActive": "active",
+    "TAGame.CarComponent_TA:ReplicatedActive": "activate_boost",
     "TAGame.CarComponent_Dodge_TA:DodgeTorque": "dodge",
     "TAGame.CarComponent_AirActivate_TA:AirActivateCount": "component_usage_in_air",
     "TAGame.CarComponent_DoubleJump_TA:DoubleJumpImpulse": "double_jump",
@@ -76,6 +77,7 @@ CAMERA_SETTINGS_LABELS = {
     "TAGame.CameraSettingsActor_TA:CameraYaw": "yaw",
     "TAGame.CameraSettingsActor_TA:CameraPitch": "pitch",
     "TAGame.CameraSettingsActor_TA:bUsingSecondaryCamera": "car_cam",
+    "TAGame.CameraSettingsActor_TA:bUsingBehindView": "rear_cam",
     "TAGame.CameraSettingsActor_TA:ProfileSettings": "camera_settings",
 }
 LABELS = {
@@ -95,7 +97,7 @@ LABELS = {
     "TAGame.RBActor_TA:ReplicatedRBState": "rigid_body",
     "TAGame.CameraSettingsActor_TA:PRI": "settings_to_player",
     "TAGame.Car_TA:ReplicatedDemolishExtended": "player_demod",
-    "TAGame.VehiclePickup_TA:NewReplicatedPickupData": "boost_grab",
+    "TAGame.VehiclePickup_TA:NewReplicatedPickupData": "boost_pickup",
     "TAGame.Ball_TA:HitTeamNum": "team_ball_hit",
 }
 

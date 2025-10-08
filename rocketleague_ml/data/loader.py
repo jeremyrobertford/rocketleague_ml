@@ -19,9 +19,7 @@ DEFAULT_BIN_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "bin"))
 DEFAULT_RRROCKET = os.path.join(DEFAULT_BIN_DIR, "rrrocket.exe")  # Windows binary name
 
 
-def find_rrrocket(
-    rrrocket_path: str | None = None, raise_error: bool = True
-) -> str | None:
+def find_rrrocket(rrrocket_path: str = "", raise_error: bool = True) -> str | None:
     """
     Resolve rrrocket executable path.
     Priority:
@@ -46,7 +44,7 @@ def find_rrrocket(
     return None
 
 
-def load_replay(file_path: str, rrrocket_path: str | None = None):
+def load_replay(file_path: str, rrrocket_path: str = ""):
     """
     Run rrrocket on a replay and return parsed JSON as a Python dict.
 
