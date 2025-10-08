@@ -21,6 +21,7 @@ from rocketleague_ml.config import (
     X_GOAL,
     GOAL_DEPTH,
     TOL,
+    TOTAL_FIELD_DISTANCE,
 )
 
 
@@ -88,13 +89,14 @@ class Rocket_League_Feature_Extractor:
         field_positioning_cols: Dict[str, pd.DataFrame | pd.Series] = {}
         max_y = abs(FIELD_Y[0])
         third_of_y = max_y / 3
+        half_of_z = Z_CEILING / 2
         third_of_z = Z_CEILING / 3
 
         field_positioning_cols[f"{main_player}_highest_half"] = (
-            game[f"{main_player}_positioning_y"] > 0
+            game[f"{main_player}_positioning_z"] >= half_of_z
         )
         field_positioning_cols[f"{main_player}_lowest_half"] = (
-            game[f"{main_player}_positioning_y"] <= 0
+            game[f"{main_player}_positioning_z"] < half_of_z
         )
         field_positioning_cols[f"{main_player}_highest_third"] = (
             game[f"{main_player}_positioning_z"] >= third_of_z * 2
@@ -315,6 +317,12 @@ class Rocket_League_Feature_Extractor:
             | game[f"{main_player}_on_front_wall"]
         )
 
+        movement_columns: Dict[str, List[str]] = {"Drifting": ["drift_active"]}
+        for label, cols in movement_columns.items():
+            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
+            features[f"Percent Time while {label}"] = perc
+            features[f"Average Stint while {label}"] = avg_stint
+
         distance_columns: Dict[str, List[str]] = {
             "Closest to Ball": ["closest_to_ball"],
             "Farthest from Ball": ["farthest_from_ball"],
@@ -324,20 +332,26 @@ class Rocket_League_Feature_Extractor:
             features[f"Percent Time while {label}"] = perc
             features[f"Average Stint while {label}"] = avg_stint
         avg_distance_to_ball = game[f"{main_player}_distance_to_ball"].mean()
-        features["Average Distance to Ball"] = avg_distance_to_ball
+        features["Average Distance to Ball"] = (
+            avg_distance_to_ball / TOTAL_FIELD_DISTANCE
+        )
         teammate_distances = [
             f"{main_player}_distance_to_{teammate}"
             for teammate in teams[main_player_team]
             if teammate != main_player
         ]
         avg_distance_to_teammates = game[teammate_distances].mean(axis=1).mean()
-        features["Average Distance to Teammates"] = avg_distance_to_teammates
+        features["Average Distance to Teammates"] = (
+            avg_distance_to_teammates / TOTAL_FIELD_DISTANCE
+        )
         opponent_distances = [
             f"{main_player}_distance_to_{opponent}"
             for opponent in teams[opponents_team]
         ]
         avg_distance_to_opponents = game[opponent_distances].mean(axis=1).mean()
-        features["Average Distance to Opponents"] = avg_distance_to_opponents
+        features["Average Distance to Opponents"] = (
+            avg_distance_to_opponents / TOTAL_FIELD_DISTANCE
+        )
 
         positioning_columns = {
             # Halves
@@ -642,9 +656,10 @@ class Rocket_League_Feature_Extractor:
         # --- Handle feature_labels.json ---
         if write_header:
             # Create JSON file with all current feature keys
-            feature_labels = {
-                feature: FEATURE_LABELS[feature] for feature in list(features[0].keys())
-            }
+            # feature_labels = {
+            #     feature: FEATURE_LABELS[feature] for feature in list(features[0].keys())
+            # }
+            feature_labels = [feature for feature in list(features[0].keys())]
             with open(labels_path, "w", encoding="utf-8") as jf:
                 json.dump(feature_labels, jf, indent=4)
         else:
@@ -678,15 +693,19 @@ class Rocket_League_Feature_Extractor:
 
         with open(labels_path, "r", encoding="utf-8") as f:
             feature_labels = json.load(f)
-        feature_dtypes: Dict[str, Any] = {
-            feature: DTYPES[meta["dtype"]] for feature, meta in feature_labels.items()
-        }
-        features = pd.read_csv(features_path, dtype=feature_dtypes)  # type: ignore
+        if isinstance(feature_labels, list):
+            features = pd.read_csv(features_path, low_memory=False)  # type: ignore
+        else:
+            feature_dtypes: Dict[str, Any] = {
+                feature: DTYPES[meta["dtype"]]
+                for feature, meta in feature_labels.items()
+            }
+            features = pd.read_csv(features_path, dtype=feature_dtypes)  # type: ignore
         return features
 
     def extract_features(
         self,
-        main_player: str,
+        main_player: str | None = None,
         games: List[pd.DataFrame] | None = None,
         save_output: bool = True,
         overwrite: bool = False,
@@ -715,11 +734,16 @@ class Rocket_League_Feature_Extractor:
         if games:
             for game in games:
                 try:
-                    game_features = self.extract_game_features(game, main_player)
-                    if save_output:
-                        self.save_features(features, features_path, labels_path)
+                    if main_player:
+                        players = [main_player]
                     else:
-                        features += game_features
+                        players, _ = self.get_player_names_and_teams(game)
+                    for player in players:
+                        game_features = self.extract_game_features(game.copy(), player)
+                        if save_output:
+                            self.save_features(features, features_path, labels_path)
+                        else:
+                            features += game_features
 
                     self.logger.print("OK.")
                     self.succeeded += 1
@@ -754,11 +778,16 @@ class Rocket_League_Feature_Extractor:
             try:
                 processed_csv_file_path = os.path.join(PROCESSED, file_name)
                 game = pd.read_csv(processed_csv_file_path, low_memory=False)  # type: ignore
-                game_features = self.extract_game_features(game, main_player)
-                if save_output:
-                    self.save_features(game_features, features_path, labels_path)
+                if main_player:
+                    players = [main_player]
                 else:
-                    features += game_features
+                    players, _ = self.get_player_names_and_teams(game)
+                for player in players:
+                    game_features = self.extract_game_features(game.copy(), player)
+                    if save_output:
+                        self.save_features(game_features, features_path, labels_path)
+                    else:
+                        features += game_features
                 self.logger.print("OK.")
                 self.succeeded += 1
             except Exception as e:

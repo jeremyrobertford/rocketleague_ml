@@ -11,7 +11,7 @@ from rocketleague_ml.utils.logging import Logger
 
 
 class Rocket_League_Pipeline:
-    def __init__(self, goal: str = "find_playstyle_consistency"):
+    def __init__(self, goal: str = "find_playstyle"):
         self.logger = Logger(active=True)
         self.preprocessor = RRRocket_JSON_Preprocessor(logger=self.logger)
         self.wrangler = Game_Data_Wrangler(logger=self.logger)

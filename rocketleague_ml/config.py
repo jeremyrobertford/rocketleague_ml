@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from typing import Any, Dict
 
 LOG = True
@@ -108,6 +109,10 @@ TOL = 50
 FIELD_X = [-4096, 4096, 4096, -4096, -4096]
 FIELD_Y = [-5120, -5120, 5120, 5120, -5120]
 ROUND_LENGTH = 300
+TOTAL_FIELD_DISTANCE = np.sqrt(
+    (X_WALL * 2) ** 2 + (Y_WALL * 2) ** 2 + (Z_CEILING * 2) ** 2
+)
+
 
 # Boost pad mapping for DFH Stadium (stadium_day_p, standard soccar layout).
 # Data source: RLBot "useful game values" + community docs.
@@ -154,6 +159,7 @@ DTYPES: Dict[str, Any] = {
 }
 
 FEATURE_LABELS = {
+    # Metadata
     "id": {
         "dtype": "str",
         "description": "Unique identifier for the game or round",
@@ -164,389 +170,890 @@ FEATURE_LABELS = {
         "description": "Round number within the game",
         "concept": "metadata",
     },
-    # Ball proximity
+    # Ball Engagement
     "Percent Time while Closest to Ball": {
         "dtype": "float",
         "description": "Percentage of time the player was the closest to the ball",
-        "concept": "ball_proximity",
+        "concept": "ball_engagement",
     },
     "Average Stint while Closest to Ball": {
         "dtype": "float",
         "description": "Average continuous time spent closest to the ball",
-        "concept": "ball_proximity",
+        "concept": "ball_engagement",
     },
     "Percent Time while Farthest from Ball": {
         "dtype": "float",
         "description": "Percentage of time the player was the farthest from the ball",
-        "concept": "ball_proximity",
+        "concept": "ball_engagement",
     },
     "Average Stint while Farthest from Ball": {
         "dtype": "float",
         "description": "Average continuous time spent farthest from the ball",
-        "concept": "ball_proximity",
+        "concept": "ball_engagement",
     },
     "Average Distance to Ball": {
         "dtype": "float",
         "description": "Mean distance from the ball during gameplay",
-        "concept": "ball_proximity",
+        "concept": "ball_engagement",
     },
-    # Player spacing
+    # Team Positioning
     "Average Distance to Teammates": {
         "dtype": "float",
         "description": "Average distance to teammates during gameplay",
-        "concept": "positioning",
+        "concept": "team_positioning",
     },
     "Average Distance to Opponents": {
         "dtype": "float",
         "description": "Average distance to opponents during gameplay",
-        "concept": "positioning",
+        "concept": "team_positioning",
     },
-    # Field halves
+    # Field Control - Halves
     "Percent Time In Offensive Half": {
         "dtype": "float",
         "description": "Percent of time spent in the offensive half of the field",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Offensive Half": {
         "dtype": "float",
         "description": "Average continuous time spent in the offensive half",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Defensive Half": {
         "dtype": "float",
         "description": "Percent of time spent in the defensive half of the field",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Defensive Half": {
         "dtype": "float",
         "description": "Average continuous time spent in the defensive half",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Left Half": {
         "dtype": "float",
         "description": "Percent of time spent in the left half of the field",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Left Half": {
         "dtype": "float",
         "description": "Average continuous time spent in the left half",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Right Half": {
         "dtype": "float",
         "description": "Percent of time spent in the right half of the field",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Right Half": {
         "dtype": "float",
         "description": "Average continuous time spent in the right half",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Highest Half": {
         "dtype": "float",
         "description": "Percent of time spent in the upper half of the field (Z-axis)",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Highest Half": {
         "dtype": "float",
         "description": "Average continuous time spent in the upper half",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Lowest Half": {
         "dtype": "float",
         "description": "Percent of time spent in the lower half of the field (Z-axis)",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Lowest Half": {
         "dtype": "float",
         "description": "Average continuous time spent in the lower half",
-        "concept": "positioning",
+        "concept": "field_control",
     },
-    # Field thirds
+    # Field Control - Thirds (Longitudinal)
     "Percent Time In Offensive Third": {
         "dtype": "float",
         "description": "Percent of time spent in offensive third of the field",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Offensive Third": {
         "dtype": "float",
         "description": "Average continuous time spent in offensive third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Neutral Third": {
         "dtype": "float",
         "description": "Percent of time spent in neutral (middle) third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Neutral Third": {
         "dtype": "float",
         "description": "Average continuous time spent in neutral third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Defensive Third": {
         "dtype": "float",
         "description": "Percent of time spent in defensive third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Defensive Third": {
         "dtype": "float",
         "description": "Average continuous time spent in defensive third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
-    # Left/Right thirds
+    # Field Control - Thirds (Lateral)
     "Percent Time In Left Third": {
         "dtype": "float",
         "description": "Percent of time spent in left third of the field",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Left Third": {
         "dtype": "float",
         "description": "Average continuous time spent in left third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Middle Third": {
         "dtype": "float",
         "description": "Percent of time spent in middle third of the field",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Middle Third": {
         "dtype": "float",
         "description": "Average continuous time spent in middle third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Right Third": {
         "dtype": "float",
         "description": "Percent of time spent in right third of the field",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Right Third": {
         "dtype": "float",
         "description": "Average continuous time spent in right third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
-    # Aerial thirds
+    # Field Control - Thirds (Vertical)
     "Percent Time In Highest Third": {
         "dtype": "float",
         "description": "Percent of time spent in highest vertical third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Highest Third": {
         "dtype": "float",
         "description": "Average continuous time spent in highest vertical third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Middle Aerial Third": {
         "dtype": "float",
         "description": "Percent of time in middle vertical third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Middle Aerial Third": {
         "dtype": "float",
         "description": "Average continuous time in middle vertical third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Percent Time In Lowest Third": {
         "dtype": "float",
         "description": "Percent of time in lowest vertical third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
     "Average Stint In Lowest Third": {
         "dtype": "float",
         "description": "Average continuous time in lowest vertical third",
-        "concept": "positioning",
+        "concept": "field_control",
     },
-    # Ball orientation
+    # Offensive Left Half
+    "Percent Time In Offensive Left Half": {
+        "dtype": "float",
+        "description": "Percent of time in the offensive left quadrant",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Left Half": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive left quadrant",
+        "concept": "field_control",
+    },
+    # Offensive Right Half
+    "Percent Time In Offensive Right Half": {
+        "dtype": "float",
+        "description": "Percent of time in the offensive right quadrant",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Right Half": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive right quadrant",
+        "concept": "field_control",
+    },
+    # Defensive Left Half
+    "Percent Time In Defensive Left Half": {
+        "dtype": "float",
+        "description": "Percent of time in the defensive left quadrant",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Left Half": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive left quadrant",
+        "concept": "field_control",
+    },
+    # Defensive Right Half
+    "Percent Time In Defensive Right Half": {
+        "dtype": "float",
+        "description": "Percent of time in the defensive right quadrant",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Right Half": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive right quadrant",
+        "concept": "field_control",
+    },
+    # Offensive Left Vertical
+    "Percent Time In Offensive Left Highest Half": {
+        "dtype": "float",
+        "description": "Percent of time in offensive left upper region",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Left Highest Half": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive left upper region",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Left Lowest Half": {
+        "dtype": "float",
+        "description": "Percent of time in offensive left lower region",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Left Lowest Half": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive left lower region",
+        "concept": "field_control",
+    },
+    # Offensive Right Vertical
+    "Percent Time In Offensive Right Highest Half": {
+        "dtype": "float",
+        "description": "Percent of time in offensive right upper region",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Right Highest Half": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive right upper region",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Right Lowest Half": {
+        "dtype": "float",
+        "description": "Percent of time in offensive right lower region",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Right Lowest Half": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive right lower region",
+        "concept": "field_control",
+    },
+    # Defensive Left Vertical
+    "Percent Time In Defensive Left Highest Half": {
+        "dtype": "float",
+        "description": "Percent of time in defensive left upper region",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Left Highest Half": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive left upper region",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Left Lowest Half": {
+        "dtype": "float",
+        "description": "Percent of time in defensive left lower region",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Left Lowest Half": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive left lower region",
+        "concept": "field_control",
+    },
+    # Defensive Right Vertical
+    "Percent Time In Defensive Right Highest Half": {
+        "dtype": "float",
+        "description": "Percent of time in defensive right upper region",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Right Highest Half": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive right upper region",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Right Lowest Half": {
+        "dtype": "float",
+        "description": "Percent of time in defensive right lower region",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Right Lowest Half": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive right lower region",
+        "concept": "field_control",
+    },
+    # Offensive Thirds (detailed)
+    "Percent Time In Offensive Left Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive left third",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Left Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive left third",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Middle Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive middle third",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Middle Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive middle third",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Right Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive right third",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Right Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive right third",
+        "concept": "field_control",
+    },
+    # Neutral Thirds (detailed)
+    "Percent Time In Neutral Left Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral left third",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Left Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral left third",
+        "concept": "field_control",
+    },
+    "Percent Time In Neutral Middle Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral middle third",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Middle Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral middle third",
+        "concept": "field_control",
+    },
+    "Percent Time In Neutral Right Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral right third",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Right Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral right third",
+        "concept": "field_control",
+    },
+    # Defensive Thirds (detailed)
+    "Percent Time In Defensive Left Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive left third",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Left Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive left third",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Middle Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive middle third",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Middle Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive middle third",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Right Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive right third",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Right Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive right third",
+        "concept": "field_control",
+    },
+    # Offensive Highest Thirds
+    "Percent Time In Offensive Left Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive left upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Left Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive left upper area",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Middle Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive center upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Middle Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive center upper area",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Right Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive right upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Right Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive right upper area",
+        "concept": "field_control",
+    },
+    # Neutral Highest Thirds
+    "Percent Time In Neutral Left Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral left upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Left Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral left upper area",
+        "concept": "field_control",
+    },
+    "Percent Time In Neutral Middle Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral center upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Middle Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral center upper area",
+        "concept": "field_control",
+    },
+    "Percent Time In Neutral Right Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral right upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Right Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral right upper area",
+        "concept": "field_control",
+    },
+    # Defensive Highest Thirds
+    "Percent Time In Defensive Left Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive left upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Left Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive left upper area",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Middle Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive center upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Middle Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive center upper area",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Right Highest Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive right upper area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Right Highest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive right upper area",
+        "concept": "field_control",
+    },
+    # Offensive Middle-Aerial Thirds
+    "Percent Time In Offensive Left Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive left mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Left Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive left mid-air area",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Middle Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive center mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Middle Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive center mid-air area",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Right Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive right mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Right Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive right mid-air area",
+        "concept": "field_control",
+    },
+    # Neutral Middle-Aerial Thirds
+    "Percent Time In Neutral Left Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral left mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Left Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral left mid-air area",
+        "concept": "field_control",
+    },
+    "Percent Time In Neutral Middle Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral center mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Middle Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral center mid-air area",
+        "concept": "field_control",
+    },
+    "Percent Time In Neutral Right Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral right mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Right Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral right mid-air area",
+        "concept": "field_control",
+    },
+    # Defensive Middle-Aerial Thirds
+    "Percent Time In Defensive Left Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive left mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Left Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive left mid-air area",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Middle Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive center mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Middle Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive center mid-air area",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Right Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive right mid-air area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Right Middle-Aerial Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive right mid-air area",
+        "concept": "field_control",
+    },
+    # Offensive Lowest Thirds
+    "Percent Time In Offensive Left Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive left lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Left Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive left lower area",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Middle Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive center lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Middle Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive center lower area",
+        "concept": "field_control",
+    },
+    "Percent Time In Offensive Right Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in offensive right lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Offensive Right Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in offensive right lower area",
+        "concept": "field_control",
+    },
+    # Neutral Lowest Thirds
+    "Percent Time In Neutral Left Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral left lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Left Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral left lower area",
+        "concept": "field_control",
+    },
+    "Percent Time In Neutral Middle Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral center lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Middle Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral center lower area",
+        "concept": "field_control",
+    },
+    "Percent Time In Neutral Right Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in neutral right lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Neutral Right Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in neutral right lower area",
+        "concept": "field_control",
+    },
+    # Defensive Lowest Thirds
+    "Percent Time In Defensive Left Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive left lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Left Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive left lower area",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Middle Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive center lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Middle Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive center lower area",
+        "concept": "field_control",
+    },
+    "Percent Time In Defensive Right Lowest Third": {
+        "dtype": "float",
+        "description": "Percent of time in defensive right lower area",
+        "concept": "field_control",
+    },
+    "Average Stint In Defensive Right Lowest Third": {
+        "dtype": "float",
+        "description": "Average continuous time in defensive right lower area",
+        "concept": "field_control",
+    },
+    # Ball Orientation
     "Percent Time In Front of Ball": {
         "dtype": "float",
-        "description": "Percent of time in front of ball relative to goal",
-        "concept": "orientation",
+        "description": "Percent of time positioned in front of the ball relative to the goal",
+        "concept": "ball_orientation",
     },
     "Average Stint In Front of Ball": {
         "dtype": "float",
-        "description": "Average continuous time spent in front of the ball",
-        "concept": "orientation",
+        "description": "Average continuous time positioned in front of the ball",
+        "concept": "ball_orientation",
     },
     "Percent Time Behind Ball": {
         "dtype": "float",
-        "description": "Percent of time behind the ball relative to goal",
-        "concept": "orientation",
+        "description": "Percent of time positioned behind the ball relative to the goal",
+        "concept": "ball_orientation",
     },
     "Average Stint Behind Ball": {
         "dtype": "float",
-        "description": "Average continuous time spent behind the ball",
-        "concept": "orientation",
+        "description": "Average continuous time positioned behind the ball",
+        "concept": "ball_orientation",
     },
-    # Speed states
-    "Percent Time while Stationary": {
-        "dtype": "float",
-        "description": "Percent of time the player was stationary",
-        "concept": "speed",
-    },
-    "Average Stint while Stationary": {
-        "dtype": "float",
-        "description": "Average continuous time spent stationary",
-        "concept": "speed",
-    },
-    "Percent Time while Slow": {
-        "dtype": "float",
-        "description": "Percent of time moving at slow speed",
-        "concept": "speed",
-    },
-    "Average Stint while Slow": {
-        "dtype": "float",
-        "description": "Average continuous time at slow speed",
-        "concept": "speed",
-    },
-    "Percent Time while Semi-Slow": {
-        "dtype": "float",
-        "description": "Percent of time moving at semi-slow speed",
-        "concept": "speed",
-    },
-    "Average Stint while Semi-Slow": {
-        "dtype": "float",
-        "description": "Average continuous time at semi-slow speed",
-        "concept": "speed",
-    },
-    "Percent Time while Medium Speed": {
-        "dtype": "float",
-        "description": "Percent of time moving at medium speed",
-        "concept": "speed",
-    },
-    "Average Stint while Medium Speed": {
-        "dtype": "float",
-        "description": "Average continuous time at medium speed",
-        "concept": "speed",
-    },
-    "Percent Time while Semi-Fast": {
-        "dtype": "float",
-        "description": "Percent of time moving at semi-fast speed",
-        "concept": "speed",
-    },
-    "Average Stint while Semi-Fast": {
-        "dtype": "float",
-        "description": "Average continuous time at semi-fast speed",
-        "concept": "speed",
-    },
-    "Percent Time while Drive Speed": {
-        "dtype": "float",
-        "description": "Percent of time moving at standard drive speed",
-        "concept": "speed",
-    },
-    "Average Stint while Drive Speed": {
-        "dtype": "float",
-        "description": "Average continuous time at drive speed",
-        "concept": "speed",
-    },
-    "Percent Time while Boost Speed": {
-        "dtype": "float",
-        "description": "Percent of time moving at boosted speed",
-        "concept": "speed",
-    },
-    "Average Stint while Boost Speed": {
-        "dtype": "float",
-        "description": "Average continuous time at boosted speed",
-        "concept": "speed",
-    },
-    "Percent Time while Supersonic": {
-        "dtype": "float",
-        "description": "Percent of time moving at supersonic speed",
-        "concept": "speed",
-    },
-    "Average Stint while Supersonic": {
-        "dtype": "float",
-        "description": "Average continuous time at supersonic speed",
-        "concept": "speed",
-    },
-    # Movement state
+    # Movement State - Grounded/Airborne
     "Percent Time Grounded": {
         "dtype": "float",
-        "description": "Percent of time on the ground",
+        "description": "Percent of time with all wheels on the ground",
         "concept": "movement_state",
     },
     "Average Stint Grounded": {
         "dtype": "float",
-        "description": "Average continuous time on the ground",
+        "description": "Average continuous time spent grounded",
         "concept": "movement_state",
     },
     "Percent Time Airborne": {
         "dtype": "float",
-        "description": "Percent of time in the air",
+        "description": "Percent of time with wheels off the ground (jumping or flying)",
         "concept": "movement_state",
     },
     "Average Stint Airborne": {
         "dtype": "float",
-        "description": "Average continuous time airborne",
+        "description": "Average continuous time spent airborne",
         "concept": "movement_state",
     },
+    # Wall/Ceiling Positioning
     "Percent Time On Ceiling": {
         "dtype": "float",
-        "description": "Percent of time on the ceiling",
+        "description": "Percent of time driving on the ceiling",
         "concept": "movement_state",
     },
     "Average Stint On Ceiling": {
         "dtype": "float",
-        "description": "Average continuous time on ceiling",
+        "description": "Average continuous time spent on the ceiling",
         "concept": "movement_state",
     },
     "Percent Time On Left Wall": {
         "dtype": "float",
-        "description": "Percent of time on left wall",
+        "description": "Percent of time driving on the left wall",
         "concept": "movement_state",
     },
     "Average Stint On Left Wall": {
         "dtype": "float",
-        "description": "Average continuous time on left wall",
+        "description": "Average continuous time spent on the left wall",
         "concept": "movement_state",
     },
     "Percent Time On Right Wall": {
         "dtype": "float",
-        "description": "Percent of time on right wall",
+        "description": "Percent of time driving on the right wall",
         "concept": "movement_state",
     },
     "Average Stint On Right Wall": {
         "dtype": "float",
-        "description": "Average continuous time on right wall",
+        "description": "Average continuous time spent on the right wall",
         "concept": "movement_state",
     },
     "Percent Time On Back Wall": {
         "dtype": "float",
-        "description": "Percent of time on back wall",
+        "description": "Percent of time driving on the back wall",
         "concept": "movement_state",
     },
     "Average Stint On Back Wall": {
         "dtype": "float",
-        "description": "Average continuous time on back wall",
+        "description": "Average continuous time spent on the back wall",
         "concept": "movement_state",
     },
     "Percent Time On Front Wall": {
         "dtype": "float",
-        "description": "Percent of time on front wall",
+        "description": "Percent of time driving on the front wall",
         "concept": "movement_state",
     },
     "Average Stint On Front Wall": {
         "dtype": "float",
-        "description": "Average continuous time on front wall",
+        "description": "Average continuous time spent on the front wall",
         "concept": "movement_state",
     },
-    # Goal areas
+    # Goal Areas
     "Percent Time In Own Goal": {
         "dtype": "float",
-        "description": "Percent of time in own goal area",
-        "concept": "positioning",
+        "description": "Percent of time spent in own goal area",
+        "concept": "field_control",
     },
     "Average Stint In Own Goal": {
         "dtype": "float",
-        "description": "Average continuous time in own goal area",
-        "concept": "positioning",
+        "description": "Average continuous time spent in own goal area",
+        "concept": "field_control",
     },
     "Percent Time In Opponents Goal": {
         "dtype": "float",
-        "description": "Percent of time in opponent's goal area",
-        "concept": "positioning",
+        "description": "Percent of time spent in opponent's goal area",
+        "concept": "field_control",
     },
     "Average Stint In Opponents Goal": {
         "dtype": "float",
-        "description": "Average continuous time in opponent's goal area",
-        "concept": "positioning",
+        "description": "Average continuous time spent in opponent's goal area",
+        "concept": "field_control",
+    },
+    # Speed States
+    "Percent Time while Stationary": {
+        "dtype": "float",
+        "description": "Percent of time the player was stationary (no movement)",
+        "concept": "speed_engagement",
+    },
+    "Average Stint while Stationary": {
+        "dtype": "float",
+        "description": "Average continuous time spent stationary",
+        "concept": "speed_engagement",
+    },
+    "Percent Time while Slow": {
+        "dtype": "float",
+        "description": "Percent of time moving at slow speed (low throttle)",
+        "concept": "speed_engagement",
+    },
+    "Average Stint while Slow": {
+        "dtype": "float",
+        "description": "Average continuous time at slow speed",
+        "concept": "speed_engagement",
+    },
+    "Percent Time while Semi-Slow": {
+        "dtype": "float",
+        "description": "Percent of time moving at semi-slow speed",
+        "concept": "speed_engagement",
+    },
+    "Average Stint while Semi-Slow": {
+        "dtype": "float",
+        "description": "Average continuous time at semi-slow speed",
+        "concept": "speed_engagement",
+    },
+    "Percent Time while Medium Speed": {
+        "dtype": "float",
+        "description": "Percent of time moving at medium speed",
+        "concept": "speed_engagement",
+    },
+    "Average Stint while Medium Speed": {
+        "dtype": "float",
+        "description": "Average continuous time at medium speed",
+        "concept": "speed_engagement",
+    },
+    "Percent Time while Semi-Fast": {
+        "dtype": "float",
+        "description": "Percent of time moving at semi-fast speed",
+        "concept": "speed_engagement",
+    },
+    "Average Stint while Semi-Fast": {
+        "dtype": "float",
+        "description": "Average continuous time at semi-fast speed",
+        "concept": "speed_engagement",
+    },
+    "Percent Time while Drive Speed": {
+        "dtype": "float",
+        "description": "Percent of time moving at standard drive speed",
+        "concept": "speed_engagement",
+    },
+    "Average Stint while Drive Speed": {
+        "dtype": "float",
+        "description": "Average continuous time at drive speed",
+        "concept": "speed_engagement",
+    },
+    "Percent Time while Boost Speed": {
+        "dtype": "float",
+        "description": "Percent of time moving at boosted speed",
+        "concept": "speed_engagement",
+    },
+    "Average Stint while Boost Speed": {
+        "dtype": "float",
+        "description": "Average continuous time at boosted speed",
+        "concept": "speed_engagement",
+    },
+    "Percent Time while Supersonic": {
+        "dtype": "float",
+        "description": "Percent of time moving at supersonic speed",
+        "concept": "speed_engagement",
+    },
+    "Average Stint while Supersonic": {
+        "dtype": "float",
+        "description": "Average continuous time at supersonic speed",
+        "concept": "speed_engagement",
     },
 }
