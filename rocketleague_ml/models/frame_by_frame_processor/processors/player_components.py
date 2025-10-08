@@ -27,9 +27,11 @@ def process_player_gained_points(
 ):
     updated_actor = Player_Component(updated_actor)
     player = frame.game.players[updated_actor.actor_id]
-    if processor.include_scoreboard_metrics:
-        field_label = f"{player.name}_score"
-        frame.processed_fields[field_label] = updated_actor.amount
+    if updated_actor.amount != player.score:
+        player.score = int(updated_actor.amount)
+        if processor.include_scoreboard_metrics:
+            field_label = f"{player.name}_score"
+            frame.processed_fields[field_label] = updated_actor.amount
     return None
 
 

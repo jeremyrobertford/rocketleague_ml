@@ -35,7 +35,6 @@ class Frame_By_Frame_Processor:
         include_ball_collisions: bool = False,
         include_player_collisions: bool = False,
         include_custom_scoreboard_metrics: bool = False,
-        include_pressure: bool = False,
         include_possession: bool = False,
         include_mechanics: bool = False,
     ):
@@ -56,7 +55,6 @@ class Frame_By_Frame_Processor:
             include_ball_collisions=include_ball_collisions,
             include_player_collisions=include_player_collisions,
             include_custom_scoreboard_metrics=include_custom_scoreboard_metrics,
-            include_pressure=include_pressure,
             include_possession=include_possession,
             include_mechanics=include_mechanics,
         )
@@ -78,7 +76,6 @@ class Frame_By_Frame_Processor:
         include_ball_collisions: bool | None = None,
         include_player_collisions: bool | None = None,
         include_custom_scoreboard_metrics: bool | None = None,
-        include_pressure: bool | None = None,
         include_possession: bool | None = None,
         include_mechanics: bool | None = None,
     ):
@@ -144,9 +141,6 @@ class Frame_By_Frame_Processor:
             include_custom_scoreboard_metrics
             if include_custom_scoreboard_metrics is not None
             else self.include_custom_scoreboard_metrics
-        )
-        self.include_pressure = (
-            include_pressure if include_pressure is not None else self.include_pressure
         )
         self.include_possession = (
             include_possession

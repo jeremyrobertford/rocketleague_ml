@@ -22,11 +22,10 @@ def main():
         include_boost_management=False,
         include_scoreboard_metrics=True,
         # not developed yet
+        include_possession=True,
         include_ball_collisions=False,
         include_player_collisions=False,
         include_custom_scoreboard_metrics=False,
-        include_pressure=False,
-        include_possession=False,
         include_mechanics=False,
     )
     result = pipeline.processor.process_games(

@@ -79,3 +79,15 @@ def process_boost_pickup(
         frame.processed_fields[field_label + "_z"] = boost_data[2]
         frame.processed_fields[field_label + "_amount"] = boost_data[3]
     return None
+
+
+def process_team_ball_hit(
+    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
+):
+    attribute = updated_actor.attribute
+    if not attribute or "Byte" not in attribute:
+        raise ValueError(f"Team ball hit cannot occur without team {updated_actor.raw}")
+    if processor.include_possession:
+        field_label = f"{"orange" if attribute["Byte"] else "blue"}_team_ball_hit"
+        frame.processed_fields[field_label] = 1
+    return None

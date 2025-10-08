@@ -32,7 +32,7 @@ class Game:
         self.rounds: Dict[int, Any] = {}
         self.players: Dict[int, Player] = {}
         self.boost_pads: Dict[int, Rigid_Body] = {}
-        self.match_time_remaining: float = ROUND_LENGTH
+        self.match_time_remaining: float = ROUND_LENGTH + 3
         self.in_overtime: bool = False
         self.overtime_elapsed: float = 0.0
         self.processed_frames: List[Frame] = []
