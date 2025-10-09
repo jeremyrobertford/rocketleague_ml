@@ -38,9 +38,8 @@ class Actor:
         labeled_raw_actor = cast(Labeled_Raw_Actor, raw_actor)
 
         if not labeled_raw_actor["object_id"] in objects:
-            raise ValueError(
-                f"Object id {labeled_raw_actor["object_id"]} not found in object table"
-            )
+            object_id = labeled_raw_actor["object_id"]
+            raise ValueError(f"Object id {object_id} not found in object table")
 
         labeled_raw_actor["object"] = objects[labeled_raw_actor["object_id"]]
 
@@ -53,9 +52,8 @@ class Actor:
             return labeled_raw_actor
 
         if stat_event["object_id"] != -1 and not stat_event["object_id"] in objects:
-            raise ValueError(
-                f"Object id {raw_actor["object_id"]} not found in object table"
-            )
+            object_id = raw_actor["object_id"]
+            raise ValueError(f"Object id {object_id} not found in object table")
 
         stat_event["object"] = (
             objects[stat_event["object_id"]]

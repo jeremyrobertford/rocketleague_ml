@@ -155,7 +155,7 @@ class Game:
                     player = (
                         self.players.get(player_actor_id) or players[player_actor_id]
                     )
-                    player.team = new_actor.secondary_category
+                    player.assign_team(new_actor.secondary_category)
             case "camera_settings":
                 raw_camera_settings = camera_settings[new_actor.actor_id]
                 player_actor_id = player_camera_settings[new_actor.actor_id]

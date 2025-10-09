@@ -101,8 +101,11 @@ LABELS = {
     "TAGame.Ball_TA:HitTeamNum": "team_ball_hit",
 }
 
-Z_GROUND = 30
-Z_CEILING = 2000
+BALL_RADIUS = 91.25
+SMALL_BOOST_RADIUS = 144.0
+BIG_BOOST_RADIUS = 208.0
+Z_GROUND = 17
+Z_CEILING = 2044
 X_WALL = 4096
 Y_WALL = 5120
 X_GOAL = 892
@@ -114,6 +117,7 @@ ROUND_LENGTH = 300
 TOTAL_FIELD_DISTANCE = np.sqrt(
     (X_WALL * 2) ** 2 + (Y_WALL * 2) ** 2 + (Z_CEILING * 2) ** 2
 )
+BOOST_NEAR_MISS_THRESHOLD = 200
 
 
 # Boost pad mapping for DFH Stadium (stadium_day_p, standard soccar layout).

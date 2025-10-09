@@ -1,13 +1,15 @@
 import os
-from pathlib import Path
-from typing import Any, Dict, List
+import math
 import pandas as pd
+from pathlib import Path
+from typing import Any, Dict, List, TypedDict
 from rocketleague_ml.config import PREPROCESSED, PROCESSED, WRANGLED
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.rigid_body import Rigid_Body
 from rocketleague_ml.core.game import Game
 from rocketleague_ml.core.frame import Frame
 from rocketleague_ml.models.rrrocket_json_preprocessor import RRRocket_JSON_Preprocessor
+from rocketleague_ml.models.collision_replicator import Collision_Replicator
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.types.attributes import (
     Raw_Game_Data,
@@ -235,6 +237,76 @@ class Frame_By_Frame_Processor:
 
         return None
 
+    def determine_kickoff_players(self, frame: Frame, eps: float = 1e-6):
+        """
+        Return kickoff taker for each team as {'blue': (name, distance), 'orange': (name, distance)}
+        or None if no player found for a team.
+        """
+        # extract ball position
+        bx = frame.processed_fields.get("ball_positioning_x")
+        by = frame.processed_fields.get("ball_positioning_y")
+        if bx is None or by is None:
+            raise ValueError("Frame missing ball_positioning_x / y")
+
+        # collect players: find all prefixes that have *_positioning_x keys except 'ball'
+        class Player_Pos(TypedDict):
+            x: float
+            y: float
+            team: str
+            name: str
+            dist: float
+
+        players: Dict[str, Player_Pos] = {}
+        for player in frame.game.players.values():
+            # read x,y (and optionally z)
+            x = frame.processed_fields.get(f"{player.name}_positioning_x")
+            y = frame.processed_fields.get(f"{player.name}_positioning_y")
+            if x is None or y is None:
+                continue
+            # assign team by x sign (x < 0 => blue, x > 0 => orange)
+            dist = math.hypot(x - bx, y - by)
+            players[player.name] = {
+                "x": x,
+                "y": y,
+                "team": player.team,
+                "dist": dist,
+                "name": player.name,
+            }
+
+        # find min per team with tie-breaker
+        result: Dict[str, Player_Pos | None] = {"Blue": None, "Orange": None}
+
+        def better(a: Player_Pos | None, b: Player_Pos | None):
+            """Return True if player a is better (should win) than b given tie rules."""
+            if a is None:
+                return False
+            if b is None:
+                return True
+            da = a["dist"]
+            db = b["dist"]
+            if abs(da - db) > eps:
+                return da < db
+            # distances equal -> tie-break by smaller x (left)
+            if a["y"] != b["y"]:
+                return a["y"] < b["y"]
+            return a["x"] > b["x"] if a["team"] == "Blue" else a["x"] < b["x"]
+
+        for info in players.values():
+            team = info["team"]
+            current = result[team]
+            is_better = better(info, current)
+            if is_better:
+                result[team] = info.copy()
+
+        # convert to (name, distance) or None
+        kickoff_players: List[str] = []
+        for team in ("Blue", "Orange"):
+            team_result = result[team]
+            if team_result is not None:
+                kickoff_players.append(team_result["name"])
+
+        return kickoff_players
+
     def process_frame(self, raw_frame: Raw_Frame, game: Game, f: int):
         frame = Frame(raw_frame, game)
         frame.calculate_match_time()
@@ -248,6 +320,9 @@ class Frame_By_Frame_Processor:
         labeled_updated_actors = [  # type: ignore
             Actor.label(a, game.objects) for a in frame.updated_actors
         ]
+
+        if f > 50 and frame.active:
+            pass
 
         if frame.resync:
             frame.game.set_actors(frame)
@@ -278,11 +353,17 @@ class Frame_By_Frame_Processor:
         for updated_actor in delayed_updated_actors:
             self.process_updated_actor(updated_actor, frame)
 
+        if not game.previous_frame.active and frame.active:
+            kickoff_players = self.determine_kickoff_players(game.previous_frame)
+            for player_name in kickoff_players:
+                frame.processed_fields[f"{player_name}_kickoff"] = 1
+
         frame.game.previous_frame = frame
         return frame
 
     def process_game(self, game_data: Raw_Game_Data):
         game = Game(game_data)
+        collision_replicator = Collision_Replicator()
 
         initial_frame = Frame(game.initial_frame, game)
         game.set_actors(initial_frame)
@@ -291,6 +372,12 @@ class Frame_By_Frame_Processor:
         frames: List[Dict[str, Any]] = []
         for f, raw_frame in enumerate(game.frames):
             processed_frame = self.process_frame(raw_frame, game, f)
+            if f == 0:
+                processors["rigid_body"](self, game.ball, processed_frame)
+                for car in game.cars.values():
+                    processors["rigid_body"](self, car, processed_frame)
+            if processed_frame.active:
+                collision_replicator.process_frame(processed_frame)
             frames.append(processed_frame.to_dict())
 
         return frames
@@ -352,8 +439,9 @@ class Frame_By_Frame_Processor:
 
         if game_datas:
             for game_data in game_datas:
+                game_id = game_data["properties"]["Id"]
                 self.logger.print(
-                    f"Parsing {game_data["properties"]["Id"]} -> {PROCESSED} ...",
+                    f"Parsing {game_id} -> {PROCESSED} ...",
                     end=" ",
                     flush=True,
                 )

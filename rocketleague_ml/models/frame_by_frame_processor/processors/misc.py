@@ -88,6 +88,7 @@ def process_team_ball_hit(
     if not attribute or "Byte" not in attribute:
         raise ValueError(f"Team ball hit cannot occur without team {updated_actor.raw}")
     if processor.include_possession:
-        field_label = f"{"orange" if attribute["Byte"] else "blue"}_team_ball_hit"
+        team = "orange" if attribute["Byte"] else "blue"
+        field_label = f"{team}_team_ball_hit"
         frame.processed_fields[field_label] = 1
     return None

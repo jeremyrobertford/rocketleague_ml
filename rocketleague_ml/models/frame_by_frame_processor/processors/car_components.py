@@ -28,6 +28,8 @@ def process_double_jump(
         frame.processed_fields[field_label + "_x"] = attribute["Location"]["x"]
         frame.processed_fields[field_label + "_y"] = attribute["Location"]["y"]
         frame.processed_fields[field_label + "_z"] = attribute["Location"]["z"]
+    # TODO: mechanics.jumps
+    # TODO: mechanics.double_jumps
     return None
 
 
@@ -62,6 +64,11 @@ def process_dodge(
         frame.processed_fields[field_label + "_x"] = attribute["Location"]["x"]
         frame.processed_fields[field_label + "_y"] = attribute["Location"]["y"]
         frame.processed_fields[field_label + "_z"] = attribute["Location"]["z"]
+    # TODO: mechanics.front_flips
+    # TODO: mechanics.side_flips
+    # TODO: mechanics.back_flips
+    # TODO: mechanics.half_flips
+    # TODO: mechanics.speed_flips
     return None
 
 
@@ -100,6 +107,7 @@ def process_steer(
     car.steer.update_amount(car_component)
     if processor.include_movement:
         frame.processed_fields[car.player.name + "_steering"] = car_component.amount
+    # TODO: sharp_turns, full_turns, slight_turns
     return None
 
 

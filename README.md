@@ -17,34 +17,34 @@ The Python code will call this binary directly to parse `.replay` files into JSO
 
 1. Clone the repo:
 
-```bash
+```powershell
 git clone https://github.com/<your-username>/rocketleague-ml.git
 cd rocketleague-ml
 ```
 
 2. Create a virtual environment and install dependencies:
 
-```bash
+```powershell
 python -m venv .venv
-source .venv\Scripts\activate
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
 3. Place .replay files into data/raw/.
 4. Preprocess data:
 
-```bash
+```powershell
 python -m scripts.preprocess.py
 ```
 
 5. Train a model:
 
-```bash
+```powershell
 python -m scripts.train_model.py
 ```
 
 6. Evaluate:
 
-```bash
+```powershell
 python -m scripts.evaluate_model.py
 ```
