@@ -249,9 +249,6 @@ class Frame_By_Frame_Processor:
             Actor.label(a, game.objects) for a in frame.updated_actors
         ]
 
-        if f > 515:
-            pass
-
         if frame.resync:
             frame.game.set_actors(frame)
 

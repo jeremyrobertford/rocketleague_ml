@@ -2,9 +2,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.frame import Frame
-from rocketleague_ml.core.ball import Ball
-from rocketleague_ml.core.car import Car
-from rocketleague_ml.core.car_component import Car_Component
 from rocketleague_ml.core.rigid_body import Rigid_Body
 
 
@@ -12,83 +9,85 @@ if TYPE_CHECKING:
     from rocketleague_ml.models.frame_by_frame_processor import Frame_By_Frame_Processor
 
 
-def process_ball_position(
-    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
-):
-    if not frame.game.ball.is_self(updated_actor):
-        raise ValueError(
-            f"Failed to update ball position because ball was not updated {updated_actor.raw}"
-        )
-    process_rigid_body_position(
-        updated_actor, frame, processor.include_ball_positioning, frame.game.ball
-    )
-    return None
-
-
-def process_car_position(
-    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
-):
-    car = frame.game.cars.get(updated_actor.actor_id)
-    if not car:
-        raise ValueError(
-            f"Failed to update car position because car was not found {updated_actor.raw}"
-        )
-    process_rigid_body_position(
-        updated_actor, frame, processor.include_car_positioning, car
-    )
-    return None
-
-
-def process_rigid_body_position(
+def _process_rigid_body_position(
     updated_actor: Actor,
     frame: Frame,
     include: bool,
-    rigid_body: Ball | Car_Component | Car,
+    rigid_body: Rigid_Body,
 ):
-    updated_actor = Rigid_Body(updated_actor, "")
+    rigid_body.update_position(updated_actor)
     if include:
-        field_label = "ball_positioning"
+        field_label = f"{rigid_body.body_label}_positioning"
         frame.processed_fields[field_label + "_sleeping"] = (
-            1 if updated_actor.positioning.sleeping else 0
+            1 if rigid_body.positioning.sleeping else 0
         )
-        frame.processed_fields[field_label + "_x"] = (
-            updated_actor.positioning.location.x
-        )
-        frame.processed_fields[field_label + "_y"] = (
-            updated_actor.positioning.location.y
-        )
-        frame.processed_fields[field_label + "_z"] = (
-            updated_actor.positioning.location.z
-        )
+        frame.processed_fields[field_label + "_x"] = rigid_body.positioning.location.x
+        frame.processed_fields[field_label + "_y"] = rigid_body.positioning.location.y
+        frame.processed_fields[field_label + "_z"] = rigid_body.positioning.location.z
         frame.processed_fields[field_label + "_rotation_x"] = (
-            updated_actor.positioning.rotation.x
+            rigid_body.positioning.rotation.x
         )
         frame.processed_fields[field_label + "_rotation_y"] = (
-            updated_actor.positioning.rotation.y
+            rigid_body.positioning.rotation.y
         )
         frame.processed_fields[field_label + "_rotation_z"] = (
-            updated_actor.positioning.rotation.z
+            rigid_body.positioning.rotation.z
         )
         frame.processed_fields[field_label + "_rotation_w"] = (
-            updated_actor.positioning.rotation.w
+            rigid_body.positioning.rotation.w
         )
         frame.processed_fields[field_label + "_linear_velocity_x"] = (
-            updated_actor.positioning.linear_velocity.x
+            rigid_body.positioning.linear_velocity.x
         )
         frame.processed_fields[field_label + "_linear_velocity_y"] = (
-            updated_actor.positioning.linear_velocity.y
+            rigid_body.positioning.linear_velocity.y
         )
         frame.processed_fields[field_label + "_linear_velocity_z"] = (
-            updated_actor.positioning.linear_velocity.z
+            rigid_body.positioning.linear_velocity.z
         )
         frame.processed_fields[field_label + "_angular_velocity_x"] = (
-            updated_actor.positioning.angular_velocity.x
+            rigid_body.positioning.angular_velocity.x
         )
         frame.processed_fields[field_label + "_angular_velocity_y"] = (
-            updated_actor.positioning.angular_velocity.y
+            rigid_body.positioning.angular_velocity.y
         )
         frame.processed_fields[field_label + "_angular_velocity_z"] = (
-            updated_actor.positioning.angular_velocity.z
+            rigid_body.positioning.angular_velocity.z
         )
-        rigid_body.update_position(updated_actor)
+        rigid_body.update_position(rigid_body)
         return None
+
+
+def process_rigid_body_position(
+    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
+):
+    if frame.game.ball.is_self(updated_actor):
+        _process_rigid_body_position(
+            updated_actor, frame, processor.include_ball_positioning, frame.game.ball
+        )
+        return None
+
+    car = frame.game.cars.get(updated_actor.actor_id)
+    if car:
+        _process_rigid_body_position(
+            updated_actor, frame, processor.include_car_positioning, car
+        )
+        return None
+
+    car_component = frame.game.car_components.get(updated_actor.actor_id)
+    if car_component:
+        return None
+
+    disconnected_car = frame.game.disconnected_cars.get(updated_actor.actor_id)
+    if disconnected_car:
+        frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
+        return None
+
+    disconnected_car_component = frame.game.disconnected_car_components.get(
+        updated_actor.actor_id
+    )
+    if disconnected_car_component:
+        frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
+        return None
+
+    raise ValueError(f"Failed to update rigid body position {updated_actor.raw}")

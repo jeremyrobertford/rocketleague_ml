@@ -25,8 +25,7 @@ from rocketleague_ml.models.frame_by_frame_processor.processors.events import (
     process_game_start,
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors.rigid_bodies import (
-    process_ball_position,
-    process_car_position,
+    process_rigid_body_position,
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors.misc import (
     process_demo,
@@ -55,8 +54,7 @@ processors: Dict[str, Callable[[Frame_By_Frame_Processor, Actor, Frame], None]] 
     "car_component": process_car_component,
     "player_component.team": process_player_team,
     "game_start_event": process_game_start,
-    "ball": process_ball_position,
-    "car": process_car_position,
+    "rigid_body": process_rigid_body_position,
     "player_demo": process_demo,
     "boost_pickup": process_boost_pickup,
     "player_component.assists": process_player_assisted,

@@ -13,16 +13,16 @@ def main():
     debug_id = "2EF689F5462A8F2B981329B15D08402A"
     replay = pipeline.wrangler.load_wrangled_file(debug_id + ".json")
     pipeline.processor.config(
-        include_ball_positioning=False,
-        include_car_positioning=False,
+        include_ball_positioning=True,
+        include_car_positioning=True,
         include_simple_vision=False,
         include_advanced_vision=False,
         include_movement=False,
         include_player_demos=False,
         include_boost_management=False,
-        include_scoreboard_metrics=True,
+        include_scoreboard_metrics=False,
         # not developed yet
-        include_possession=True,
+        include_possession=False,
         include_ball_collisions=False,
         include_player_collisions=False,
         include_custom_scoreboard_metrics=False,
