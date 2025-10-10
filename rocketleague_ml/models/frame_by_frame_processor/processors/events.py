@@ -16,7 +16,7 @@ def process_game_start(
         raise ValueError(f"Game active state not valid {updated_actor.raw}")
     name = frame.game.names[updated_actor.attribute["Int"]]
     if name == "Active":
-        frame.game.activate_game()
+        frame.game.activate_game(frame)
         frame.calculate_match_time()
     elif name == "PostGoalScored":
         frame.game.deactivate_game()

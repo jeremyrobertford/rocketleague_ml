@@ -262,9 +262,10 @@ class Game:
 
         return None
 
-    def activate_game(self):
+    def activate_game(self, frame: Frame):
         self.round += 1
         self.active = True
+        self.match_time_remaining += frame.delta
         return None
 
     def deactivate_game(self):

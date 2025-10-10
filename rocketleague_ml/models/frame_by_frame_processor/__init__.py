@@ -10,6 +10,7 @@ from rocketleague_ml.core.game import Game
 from rocketleague_ml.core.frame import Frame
 from rocketleague_ml.models.rrrocket_json_preprocessor import RRRocket_JSON_Preprocessor
 from rocketleague_ml.models.collision_replicator import Collision_Replicator
+from rocketleague_ml.models.collision_detector import RocketLeagueCollisionDetector
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.types.attributes import (
     Raw_Game_Data,
@@ -353,17 +354,17 @@ class Frame_By_Frame_Processor:
         for updated_actor in delayed_updated_actors:
             self.process_updated_actor(updated_actor, frame)
 
-        if not game.previous_frame.active and frame.active:
+        if not frame.game.previous_frame.active and frame.active:
             kickoff_players = self.determine_kickoff_players(game.previous_frame)
             for player_name in kickoff_players:
                 frame.processed_fields[f"{player_name}_kickoff"] = 1
 
-        frame.game.previous_frame = frame
         return frame
 
     def process_game(self, game_data: Raw_Game_Data):
         game = Game(game_data)
         collision_replicator = Collision_Replicator()
+        collision_detector = RocketLeagueCollisionDetector()
 
         initial_frame = Frame(game.initial_frame, game)
         game.set_actors(initial_frame)
@@ -377,8 +378,35 @@ class Frame_By_Frame_Processor:
                 for car in game.cars.values():
                     processors["rigid_body"](self, car, processed_frame)
             if processed_frame.active:
-                collision_replicator.process_frame(processed_frame)
+                if f >= 171:
+                    pass
+                # collision_replicator.process_frame(processed_frame)
+                collision = collision_detector.detect_collision(
+                    prev_frame=processed_frame.game.previous_frame,
+                    curr_frame=processed_frame,
+                )
+                if collision:
+                    processed_frame.processed_fields[
+                        collision.player_name + "_collision_normal_x"
+                    ] = collision.collision_normal.x
+                    processed_frame.processed_fields[
+                        collision.player_name + "_collision_normal_y"
+                    ] = collision.collision_normal.y
+                    processed_frame.processed_fields[
+                        collision.player_name + "_collision_normal_z"
+                    ] = collision.collision_normal.z
+                    processed_frame.processed_fields[
+                        collision.player_name + "_impulse_vector_x"
+                    ] = collision.impulse_vector.x
+                    processed_frame.processed_fields[
+                        collision.player_name + "_impulse_vector_y"
+                    ] = collision.impulse_vector.y
+                    processed_frame.processed_fields[
+                        collision.player_name + "_impulse_vector_z"
+                    ] = collision.impulse_vector.z
+                    pass
             frames.append(processed_frame.to_dict())
+            processed_frame.game.previous_frame = processed_frame
 
         return frames
 

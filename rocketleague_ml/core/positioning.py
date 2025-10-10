@@ -1,3 +1,4 @@
+from typing import Tuple
 from math import sqrt, atan2, acos
 from rocketleague_ml.utils.helpers import convert_euler_to_quat
 from rocketleague_ml.types.attributes import (
@@ -18,6 +19,13 @@ class Base_Position:
     def copy(self):
         return Base_Position(self.to_dict())
 
+    def to_tuple(self) -> Tuple[float | int, float | int, float | int]:
+        return (
+            self.x,
+            self.y,
+            self.z,
+        )
+
     def to_dict(self) -> Position_Dict:
         return {
             "x": self.x,
@@ -36,6 +44,14 @@ class Rotation:
 
     def copy(self):
         return Rotation(self.to_dict())
+
+    def to_tuple(self) -> Tuple[float | int, float | int, float | int, float | int]:
+        return (
+            self.x,
+            self.y,
+            self.z,
+            self.w,
+        )
 
     def to_dict(self) -> Rotation_Dict:
         return {

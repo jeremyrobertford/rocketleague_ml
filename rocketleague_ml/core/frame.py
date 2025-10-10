@@ -39,7 +39,7 @@ class Frame:
 
     def set_values_from_previous(self):
         one_time_event_keys = [
-            "demo",
+            "kickoff" "demo",
             "demod",
             "boost_pickup",
             "score",
