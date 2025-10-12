@@ -48,6 +48,7 @@ class Frame:
             "assist",
             "goal",
             "team_ball_hit",
+            "hit_ball",
         ]
         for key, value in self.game.previous_frame.processed_fields.items():
             ignore = False
