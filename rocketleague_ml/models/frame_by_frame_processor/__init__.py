@@ -416,28 +416,29 @@ class Frame_By_Frame_Processor:
                     frame_number=f,
                 )
                 if self.include_ball_collisions:
+                    field_label = "ball_hit"
                     for collision in collisions.ball_environment_collisions:
-                        processed_frame.processed_fields["ball_impact_x"] = (
-                            collision.ball_impact_point.x
-                        )
-                        processed_frame.processed_fields["ball_impact_y"] = (
-                            collision.ball_impact_point.y
-                        )
-                        processed_frame.processed_fields["ball_impact_z"] = (
-                            collision.ball_impact_point.z
-                        )
                         processed_frame.processed_fields[
-                            "ball_collision_confidence"
+                            field_label + "_ball_impact_x"
+                        ] = collision.ball_impact_point.x
+                        processed_frame.processed_fields[
+                            field_label + "_ball_impact_y"
+                        ] = collision.ball_impact_point.y
+                        processed_frame.processed_fields[
+                            field_label + "_ball_impact_z"
+                        ] = collision.ball_impact_point.z
+                        processed_frame.processed_fields[
+                            field_label + "_ball_collision_confidence"
                         ] = collision.confidence
-                        processed_frame.processed_fields["ball_impulse_x"] = (
-                            collision.impulse_vector.x
-                        )
-                        processed_frame.processed_fields["ball_impulse_y"] = (
-                            collision.impulse_vector.y
-                        )
-                        processed_frame.processed_fields["ball_impulse_z"] = (
-                            collision.impulse_vector.z
-                        )
+                        processed_frame.processed_fields[
+                            field_label + "_ball_impulse_x"
+                        ] = collision.impulse_vector.x
+                        processed_frame.processed_fields[
+                            field_label + "_ball_impulse_y"
+                        ] = collision.impulse_vector.y
+                        processed_frame.processed_fields[
+                            field_label + "_ball_impulse_z"
+                        ] = collision.impulse_vector.z
                 if self.include_player_collisions:
                     for collision in collisions.player_environment_collisions:
                         pass
