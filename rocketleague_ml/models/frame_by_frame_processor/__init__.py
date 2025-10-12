@@ -9,8 +9,7 @@ from rocketleague_ml.core.rigid_body import Rigid_Body
 from rocketleague_ml.core.game import Game
 from rocketleague_ml.core.frame import Frame
 from rocketleague_ml.models.rrrocket_json_preprocessor import RRRocket_JSON_Preprocessor
-from rocketleague_ml.models.collision_replicator import Collision_Replicator
-from rocketleague_ml.models.collision_detector import RocketLeagueCollisionDetector
+from rocketleague_ml.models.cd1 import RocketLeagueCollisionDetector
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.types.attributes import (
     Raw_Game_Data,
@@ -112,6 +111,55 @@ class Frame_By_Frame_Processor:
             if include_ball_positioning is not None
             else self.include_ball_positioning
         )
+
+        include_possession = (
+            include_possession
+            if include_possession is not None
+            else self.include_possession
+        )
+        include_custom_scoreboard_metrics = (
+            include_custom_scoreboard_metrics
+            if include_custom_scoreboard_metrics is not None
+            else self.include_custom_scoreboard_metrics
+        )
+        include_player_collisions = (
+            include_player_collisions
+            if include_player_collisions is not None
+            else self.include_player_collisions
+        )
+        include_ball_collisions = (
+            include_ball_collisions
+            if include_ball_collisions is not None
+            else self.include_ball_collisions
+        )
+
+        if not self.include_ball_positioning and include_possession:
+            raise ValueError("include_possesion requires include_ball_positioning.")
+        if not self.include_ball_positioning and include_ball_collisions:
+            raise ValueError(
+                "include_ball_collisions requires include_ball_positioning."
+            )
+        if not self.include_ball_positioning and include_custom_scoreboard_metrics:
+            raise ValueError(
+                "include_custom_scoreboard_metrics requires include_ball_positioning."
+            )
+
+        if not self.include_car_positioning and include_possession:
+            raise ValueError("include_possesion requires include_car_positioning.")
+        if not self.include_car_positioning and include_ball_collisions:
+            raise ValueError(
+                "include_ball_collisions requires include_car_positioning."
+            )
+        if not self.include_car_positioning and include_custom_scoreboard_metrics:
+            raise ValueError(
+                "include_custom_scoreboard_metrics requires include_car_positioning."
+            )
+
+        self.include_ball_collisions = include_ball_collisions
+        self.include_player_collisions = include_player_collisions
+        self.include_custom_scoreboard_metrics = include_custom_scoreboard_metrics
+        self.include_possession = include_possession
+
         self.include_movement = (
             include_movement if include_movement is not None else self.include_movement
         )
@@ -129,26 +177,6 @@ class Frame_By_Frame_Processor:
             include_boost_management
             if include_boost_management is not None
             else self.include_boost_management
-        )
-        self.include_ball_collisions = (
-            include_ball_collisions
-            if include_ball_collisions is not None
-            else self.include_ball_collisions
-        )
-        self.include_player_collisions = (
-            include_player_collisions
-            if include_player_collisions is not None
-            else self.include_player_collisions
-        )
-        self.include_custom_scoreboard_metrics = (
-            include_custom_scoreboard_metrics
-            if include_custom_scoreboard_metrics is not None
-            else self.include_custom_scoreboard_metrics
-        )
-        self.include_possession = (
-            include_possession
-            if include_possession is not None
-            else self.include_possession
         )
         self.include_mechanics = (
             include_mechanics
@@ -322,9 +350,6 @@ class Frame_By_Frame_Processor:
             Actor.label(a, game.objects) for a in frame.updated_actors
         ]
 
-        if f > 50 and frame.active:
-            pass
-
         if frame.resync:
             frame.game.set_actors(frame)
 
@@ -363,7 +388,6 @@ class Frame_By_Frame_Processor:
 
     def process_game(self, game_data: Raw_Game_Data):
         game = Game(game_data)
-        collision_replicator = Collision_Replicator()
         collision_detector = RocketLeagueCollisionDetector()
 
         initial_frame = Frame(game.initial_frame, game)
@@ -377,34 +401,92 @@ class Frame_By_Frame_Processor:
                 processors["rigid_body"](self, game.ball, processed_frame)
                 for car in game.cars.values():
                     processors["rigid_body"](self, car, processed_frame)
-            if processed_frame.active:
+            include_collision = (
+                self.include_ball_collisions
+                or self.include_custom_scoreboard_metrics
+                or self.include_player_collisions
+                or self.include_possession
+            )
+            if processed_frame.active and include_collision:
                 if f >= 171:
                     pass
-                # collision_replicator.process_frame(processed_frame)
-                collision = collision_detector.detect_collision(
+                collisions = collision_detector.detect_all_collisions(
                     prev_frame=processed_frame.game.previous_frame,
                     curr_frame=processed_frame,
+                    frame_number=f,
                 )
-                if collision:
-                    processed_frame.processed_fields[
-                        collision.player_name + "_collision_normal_x"
-                    ] = collision.collision_normal.x
-                    processed_frame.processed_fields[
-                        collision.player_name + "_collision_normal_y"
-                    ] = collision.collision_normal.y
-                    processed_frame.processed_fields[
-                        collision.player_name + "_collision_normal_z"
-                    ] = collision.collision_normal.z
-                    processed_frame.processed_fields[
-                        collision.player_name + "_impulse_vector_x"
-                    ] = collision.impulse_vector.x
-                    processed_frame.processed_fields[
-                        collision.player_name + "_impulse_vector_y"
-                    ] = collision.impulse_vector.y
-                    processed_frame.processed_fields[
-                        collision.player_name + "_impulse_vector_z"
-                    ] = collision.impulse_vector.z
+                if self.include_ball_collisions:
+                    for collision in collisions.ball_environment_collisions:
+                        processed_frame.processed_fields["ball_impact_x"] = (
+                            collision.ball_impact_point.x
+                        )
+                        processed_frame.processed_fields["ball_impact_y"] = (
+                            collision.ball_impact_point.y
+                        )
+                        processed_frame.processed_fields["ball_impact_z"] = (
+                            collision.ball_impact_point.z
+                        )
+                        processed_frame.processed_fields[
+                            "ball_collision_confidence"
+                        ] = collision.confidence
+                        processed_frame.processed_fields["ball_impulse_x"] = (
+                            collision.impulse_vector.x
+                        )
+                        processed_frame.processed_fields["ball_impulse_y"] = (
+                            collision.impulse_vector.y
+                        )
+                        processed_frame.processed_fields["ball_impulse_z"] = (
+                            collision.impulse_vector.z
+                        )
+                if self.include_player_collisions:
+                    for collision in collisions.player_environment_collisions:
+                        pass
+                if self.include_ball_collisions and self.include_car_positioning:
+                    for collision in collisions.ball_player_collisions:
+                        field_label = f"{collision.player_name}_hit_ball"
+                        processed_frame.processed_fields[
+                            field_label + "_ball_impact_x"
+                        ] = collision.ball_impact_point.x
+                        processed_frame.processed_fields[
+                            field_label + "_ball_impact_y"
+                        ] = collision.ball_impact_point.y
+                        processed_frame.processed_fields[
+                            field_label + "_ball_impact_z"
+                        ] = collision.ball_impact_point.z
+                        processed_frame.processed_fields[
+                            field_label + "_car_impact_x"
+                        ] = collision.car_impact_point.x
+                        processed_frame.processed_fields[
+                            field_label + "_car_impact_y"
+                        ] = collision.car_impact_point.y
+                        processed_frame.processed_fields[
+                            field_label + "_car_impact_z"
+                        ] = collision.car_impact_point.z
+                        processed_frame.processed_fields[
+                            field_label + "_collision_normal_x"
+                        ] = collision.collision_normal.x
+                        processed_frame.processed_fields[
+                            field_label + "_collision_normal_y"
+                        ] = collision.collision_normal.y
+                        processed_frame.processed_fields[
+                            field_label + "_collision_normal_z"
+                        ] = collision.collision_normal.z
+                        processed_frame.processed_fields[
+                            field_label + "_collision_confidence"
+                        ] = collision.confidence
+                        processed_frame.processed_fields[field_label + "_impulse_x"] = (
+                            collision.impulse_vector.x
+                        )
+                        processed_frame.processed_fields[field_label + "_impulse_y"] = (
+                            collision.impulse_vector.y
+                        )
+                        processed_frame.processed_fields[field_label + "_impulse_z"] = (
+                            collision.impulse_vector.z
+                        )
                     pass
+                if self.include_player_collisions:
+                    for collision in collisions.player_player_collisions:
+                        pass
             frames.append(processed_frame.to_dict())
             processed_frame.game.previous_frame = processed_frame
 

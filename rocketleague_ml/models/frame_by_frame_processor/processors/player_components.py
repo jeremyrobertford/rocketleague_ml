@@ -17,8 +17,9 @@ def process_player_team(
         )
     player = frame.game.players[updated_actor.actor_id]
     team = frame.game.teams[updated_actor.active_actor_id]
+    player.assign_team(team.secondary_category)
     field_label = f"{player.name}_team"
-    frame.processed_fields[field_label] = player.team or team.secondary_category
+    frame.processed_fields[field_label] = team.secondary_category
     return None
 
 

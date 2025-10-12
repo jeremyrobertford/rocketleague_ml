@@ -21,9 +21,9 @@ def main():
         include_player_demos=False,
         include_boost_management=False,
         include_scoreboard_metrics=False,
+        include_ball_collisions=True,
         # not developed yet
         include_possession=False,
-        include_ball_collisions=False,
         include_player_collisions=False,
         include_custom_scoreboard_metrics=False,
         include_mechanics=False,
