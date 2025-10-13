@@ -10,7 +10,7 @@ from rocketleague_ml.models.frame_by_frame_processor import Frame_By_Frame_Proce
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.config import (
     DTYPES,
-    FEATURE_LABELS,
+    # FEATURE_LABELS,
     FEATURES,
     PROCESSED,
     FIELD_Y,
@@ -179,7 +179,7 @@ class Rocket_League_Feature_Extractor:
         game: pd.DataFrame,
         player_names: List[str],
         main_player: str | None = None,
-    ):
+    ) -> Dict[str, pd.DataFrame | pd.Series | NDArray[np.float64]]:
         speed_cols: Dict[str, pd.DataFrame | pd.Series | NDArray[Any]] = {}
         for player_name in player_names:
             if main_player and player_name != main_player:
@@ -227,6 +227,618 @@ class Rocket_League_Feature_Extractor:
 
         return perc_in_position, perc_avg_stint
 
+    def extract_touch_locations(
+        self,
+        game: pd.DataFrame,
+        player_names: List[str],
+        teams: Dict[str, List[str]],
+        main_player: str,
+    ) -> Dict[str, pd.Series]:
+        toward_goal_tol = 0.7
+        toward_teammate_tol = 0.6
+        toward_opponent_tol = 0.6
+        toward_open_space_tol: float | None = None
+        result: Dict[str, pd.Series] = {}
+
+        # Define goal directions (Rocket League convention)
+        GOAL_BLUE = np.array([0, -5120, 0])
+        GOAL_ORANGE = np.array([0, 5120, 0])
+
+        # Precompute player positions
+        positions = {
+            p: game[
+                [
+                    f"{p}_positioning_x",
+                    f"{p}_positioning_y",
+                    f"{p}_positioning_z",
+                ]
+            ].to_numpy()
+            for p in player_names
+        }
+
+        # Ball position
+        ball_pos = game[
+            [
+                "ball_positioning_x",
+                "ball_positioning_y",
+                "ball_positioning_z",
+            ]
+        ].to_numpy()
+
+        player = main_player
+        prefix = f"{player}_hit_ball_"
+
+        try:
+            impulses = game[
+                [prefix + "impulse_x", prefix + "impulse_y", prefix + "impulse_z"]
+            ].to_numpy()
+            confidence = game[prefix + "collision_confidence"].fillna(0).to_numpy()  # type: ignore
+        except KeyError:
+            return {}
+
+        hit_dir = np.nan_to_num(
+            impulses / (np.linalg.norm(impulses, axis=1, keepdims=True) + 1e-6)
+        )
+
+        # Determine which team player belongs to
+        team = next((t for t, players in teams.items() if player in players), None)
+        if not team:
+            raise ValueError(f"No team found for player {player} in {teams}")
+
+        # Compute directional vectors
+        goal_target = GOAL_ORANGE if team.lower() == "blue" else GOAL_BLUE
+        goal_vec = goal_target - ball_pos
+        goal_vec /= np.linalg.norm(goal_vec, axis=1, keepdims=True) + 1e-6
+        to_goal = np.sum(hit_dir * goal_vec, axis=1)
+
+        # Teammate direction
+        teammate_positions = [positions[p] for p in teams[team] if p != player]
+        if teammate_positions:
+            team_center = np.mean(np.stack(teammate_positions), axis=0)
+            team_vec = team_center - ball_pos
+            team_vec /= np.linalg.norm(team_vec, axis=1, keepdims=True) + 1e-6
+            to_teammate = np.sum(hit_dir * team_vec, axis=1)
+        else:
+            to_teammate = np.zeros(len(game))
+
+        # Opponent direction
+        opponent_team = [t for t in teams.keys() if t.lower() != team.lower()][0]
+        opponent_positions = [positions[p] for p in teams[opponent_team] if p != player]
+        if opponent_positions:
+            opp_center = np.mean(np.stack(opponent_positions), axis=0)
+            opp_vec = opp_center - ball_pos
+            opp_vec /= np.linalg.norm(opp_vec, axis=1, keepdims=True) + 1e-6
+            to_opponent = np.sum(hit_dir * opp_vec, axis=1)
+        else:
+            to_opponent = np.zeros(len(game))
+
+        # Open space heuristic
+        open_space_score = (
+            1
+            - np.maximum.reduce(
+                [np.abs(to_goal), np.abs(to_teammate), np.abs(to_opponent)]
+            )
+            if toward_open_space_tol is None
+            else toward_open_space_tol
+        )
+
+        # Detect multiple collisions (50/50s)
+        collision_count = np.sum(
+            [
+                ~game[f"{p}_hit_ball_collision_confidence"].isna().to_numpy()
+                for p in player_names
+            ],
+            axis=0,
+        )
+        fifty_fifty_mask = collision_count > 1
+
+        # Create independent boolean masks for each touch type
+        categories: Dict[str, Any] = {
+            "fifty_fifty": fifty_fifty_mask,
+            "towards_goal": (to_goal > toward_goal_tol),
+            "towards_teammate": (to_teammate > toward_teammate_tol),
+            "towards_opponent": (to_opponent > toward_opponent_tol),
+            "towards_open_space": (
+                (open_space_score > 0.5)
+                & ~(to_goal > toward_goal_tol)
+                & ~(to_teammate > toward_teammate_tol)
+                & ~(to_opponent > toward_opponent_tol)
+                & ~fifty_fifty_mask
+            ),
+        }
+
+        # Total touch detection
+        touch_mask = confidence > 0
+        result[f"{player}_touch_total"] = pd.Series(
+            touch_mask.astype(int), index=game.index
+        )
+
+        # Add direction dot products for analysis
+        result[f"{player}_touch_to_goal_dot"] = pd.Series(to_goal, index=game.index)
+        result[f"{player}_touch_to_teammate_dot"] = pd.Series(
+            to_teammate, index=game.index
+        )
+        result[f"{player}_touch_to_opponent_dot"] = pd.Series(
+            to_opponent, index=game.index
+        )
+        result[f"{player}_touch_open_space_score"] = pd.Series(
+            open_space_score, index=game.index
+        )
+
+        # Add independent category flags
+        for cat, mask in categories.items():
+            result[f"{player}_touch_{cat}"] = pd.Series(
+                (mask & touch_mask).astype(int), index=game.index
+            )
+
+        return result
+
+    def add_features_to_result(
+        self,
+        features: Dict[str, Any],
+        main_player: str,
+        player_names: List[str],
+        game: pd.DataFrame,
+        column_label: str,
+        filter_label: str,
+        teams: Dict[str, List[str]],
+        main_player_team: str,
+        opponents_team: str,
+    ):
+        distance_cols = {
+            column_label + key: value
+            for key, value in self.extract_distances(
+                game=game, player_names=player_names, main_player=main_player
+            ).items()
+        }
+        field_positioning_cols = {
+            column_label + key: value
+            for key, value in self.extract_field_positioning(
+                game=game, player_names=player_names, main_player=main_player
+            ).items()
+        }
+        speed_cols = {
+            column_label + key: value
+            for key, value in self.extract_speeds(
+                game=game, player_names=player_names, main_player=main_player
+            ).items()
+        }
+        touch_location_cols = {
+            column_label + key: value
+            for key, value in self.extract_touch_locations(
+                game=game,
+                player_names=player_names,
+                main_player=main_player,
+                teams=teams,
+            ).items()
+        }
+
+        game = pd.concat(
+            [
+                game,
+                pd.DataFrame(
+                    distance_cols
+                    | field_positioning_cols
+                    | speed_cols
+                    | touch_location_cols,
+                    index=game.index,
+                ),
+            ],
+            axis=1,
+        )
+
+        ball_distance_cols = [
+            c for c in distance_cols.keys() if c.endswith("_distance_to_ball")
+        ]
+        dependent_cols: Dict[str, pd.DataFrame | pd.Series] = {}
+        dependent_cols[f"{column_label}{main_player}_closest_to_ball"] = game[
+            f"{column_label}{main_player}_distance_to_ball"
+        ] == game[ball_distance_cols].min(axis=1)
+        dependent_cols[f"{column_label}{main_player}_farthest_from_ball"] = game[
+            f"{column_label}{main_player}_distance_to_ball"
+        ] == game[ball_distance_cols].max(axis=1)
+        # Wall checks, excluding goal occupancy
+        dependent_cols[f"{column_label}{main_player}_on_back_wall"] = (
+            game[f"{column_label}{main_player}_positioning_y"] <= -(Y_WALL - TOL)
+        ) & (~game[f"{column_label}{main_player}_in_own_goal"])
+        dependent_cols[f"{column_label}{main_player}_on_front_wall"] = (
+            game[f"{column_label}{main_player}_positioning_y"] >= (Y_WALL - TOL)
+        ) & (~game[f"{column_label}{main_player}_in_opponents_goal"])
+
+        dependent_cols[f"{column_label}{main_player}_is_still"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] <= 10
+        )
+        dependent_cols[f"{column_label}{main_player}_is_slow"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] <= 500
+        )
+        dependent_cols[f"{column_label}{main_player}_is_semi_slow"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] > 500
+        ) & (game[f"{column_label}{main_player}_positioning_linear_velocity"] <= 1000)
+        dependent_cols[f"{column_label}{main_player}_is_medium_speed"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] > 1000
+        ) & (game[f"{column_label}{main_player}_positioning_linear_velocity"] <= 1500)
+        dependent_cols[f"{column_label}{main_player}_is_semi_fast"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] > 1500
+        ) & (game[f"{column_label}{main_player}_positioning_linear_velocity"] <= 2000)
+        dependent_cols[f"{column_label}{main_player}_is_fast"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] > 2000
+        )
+
+        dependent_cols[f"{column_label}{main_player}_is_drive_speed"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] <= 1410
+        )
+        dependent_cols[f"{column_label}{main_player}_is_boost_speed"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] > 1410
+        ) & (game[f"{column_label}{main_player}_positioning_linear_velocity"] < 2200)
+        dependent_cols[f"{column_label}{main_player}_is_supersonic"] = (
+            game[f"{column_label}{main_player}_positioning_linear_velocity"] >= 2200
+        )
+
+        game = pd.concat(
+            [game, pd.DataFrame(dependent_cols, index=game.index)],
+            axis=1,
+        )
+        game.loc[:, f"{column_label}{main_player}_airborne"] = ~(
+            game[f"{column_label}{main_player}_grounded"]
+            | game[f"{column_label}{main_player}_on_ceiling"]
+            | game[f"{column_label}{main_player}_on_left_wall"]
+            | game[f"{column_label}{main_player}_on_right_wall"]
+            | game[f"{column_label}{main_player}_on_back_wall"]
+            | game[f"{column_label}{main_player}_on_front_wall"]
+        )
+
+        total_touches = game[f"{column_label}{main_player}_touch_total"].sum()
+        features[f"{filter_label}Fifty-Fifty Touch Percentage"] = (
+            game[f"{column_label}{main_player}_touch_fifty_fifty"].sum() / total_touches
+        )
+        features[f"{filter_label}Towards Goal Touch Percentage"] = (
+            game[f"{column_label}{main_player}_touch_towards_goal"].sum()
+            / total_touches
+        )
+        features[f"{filter_label}Towards Teammate Touch Percentage"] = (
+            game[f"{column_label}{main_player}_touch_towards_teammate"].sum()
+            / total_touches
+        )
+        features[f"{filter_label}Towards Opponent Touch Percentage"] = (
+            game[f"{column_label}{main_player}_touch_towards_opponent"].sum()
+            / total_touches
+        )
+        features[f"{filter_label}Towards Open Space Touch Percentage"] = (
+            game[f"{column_label}{main_player}_touch_towards_open_space"].sum()
+            / total_touches
+        )
+
+        movement_columns: Dict[str, List[str]] = {
+            # f"{filter_label}Drifting": [f"{column_label}drift_active"]
+        }
+        for label, cols in movement_columns.items():
+            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
+            features[f"{filter_label}Percent Time while {label}"] = perc
+            features[f"{filter_label}Average Stint while {label}"] = avg_stint
+
+        distance_columns: Dict[str, List[str]] = {
+            f"{filter_label}Closest to Ball": [f"{column_label}closest_to_ball"],
+            f"{filter_label}Farthest from Ball": [f"{column_label}farthest_from_ball"],
+        }
+        for label, cols in distance_columns.items():
+            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
+            features[f"{filter_label}Percent Time while {label}"] = perc
+            features[f"{filter_label}Average Stint while {label}"] = avg_stint
+        avg_distance_to_ball = game[
+            f"{column_label}{main_player}_distance_to_ball"
+        ].mean()
+        features[f"{filter_label}Average Distance to Ball"] = (
+            avg_distance_to_ball / TOTAL_FIELD_DISTANCE
+        )
+        teammate_distances = [
+            f"{column_label}{main_player}_distance_to_{teammate}"
+            for teammate in teams[main_player_team]
+            if teammate != main_player
+        ]
+        avg_distance_to_teammates = game[teammate_distances].mean(axis=1).mean()
+        features[f"{filter_label}Average Distance to Teammates"] = (
+            avg_distance_to_teammates / TOTAL_FIELD_DISTANCE
+        )
+        opponent_distances = [
+            f"{column_label}{main_player}_distance_to_{opponent}"
+            for opponent in teams[opponents_team]
+        ]
+        avg_distance_to_opponents = game[opponent_distances].mean(axis=1).mean()
+        features[f"{filter_label}Average Distance to Opponents"] = (
+            avg_distance_to_opponents / TOTAL_FIELD_DISTANCE
+        )
+
+        positioning_columns = {
+            # Halves
+            f"{filter_label}In Offensive Half": [f"{column_label}offensive_half"],
+            f"{filter_label}In Defensive Half": [f"{column_label}defensive_half"],
+            f"{filter_label}In Left Half": [f"{column_label}left_half"],
+            f"{filter_label}In Right Half": [f"{column_label}right_half"],
+            f"{filter_label}In Highest Half": [f"{column_label}highest_half"],
+            f"{filter_label}In Lowest Half": [f"{column_label}lowest_half"],
+            # Thirds (longitudinal)
+            f"{filter_label}In Offensive Third": [f"{column_label}offensive_third"],
+            f"{filter_label}In Neutral Third": [f"{column_label}neutral_third"],
+            f"{filter_label}In Defensive Third": [f"{column_label}defensive_third"],
+            # Thirds (lateral)
+            f"{filter_label}In Left Third": [f"{column_label}left_third"],
+            f"{filter_label}In Middle Third": [f"{column_label}middle_third"],
+            f"{filter_label}In Right Third": [f"{column_label}right_third"],
+            # Third (Vertical)
+            f"{filter_label}In Highest Third": [f"{column_label}highest_third"],
+            f"{filter_label}In Middle Aerial Third": [
+                f"{column_label}middle_aerial_third"
+            ],
+            f"{filter_label}In Lowest Third": [f"{column_label}lowest_third"],
+            # Half intersections
+            f"{filter_label}In Offensive Left Half": [
+                f"{column_label}offensive_half",
+                f"{column_label}left_half",
+            ],
+            f"{filter_label}In Offensive Right Half": [
+                f"{column_label}offensive_half",
+                f"{column_label}right_half",
+            ],
+            f"{filter_label}In Defensive Left Half": [
+                f"{column_label}defensive_half",
+                f"{column_label}left_half",
+            ],
+            f"{filter_label}In Defensive Right Half": [
+                f"{column_label}defensive_half",
+                f"{column_label}right_half",
+            ],
+            # Half intersections with verticality
+            f"{filter_label}In Offensive Left Highest Half": [
+                f"{column_label}offensive_half",
+                f"{column_label}left_half",
+                f"{column_label}highest_half",
+            ],
+            f"{filter_label}In Offensive Left Lowest Half": [
+                f"{column_label}offensive_half",
+                f"{column_label}left_half",
+                f"{column_label}lowest_half",
+            ],
+            f"{filter_label}In Offensive Right Highest Half": [
+                f"{column_label}offensive_half",
+                f"{column_label}right_half",
+                f"{column_label}highest_half",
+            ],
+            f"{filter_label}In Offensive Right Lowest Half": [
+                f"{column_label}offensive_half",
+                f"{column_label}right_half",
+                f"{column_label}lowest_half",
+            ],
+            f"{filter_label}In Defensive Left Highest Half": [
+                f"{column_label}defensive_half",
+                f"{column_label}left_half",
+                f"{column_label}highest_half",
+            ],
+            f"{filter_label}In Defensive Left Lowest Half": [
+                f"{column_label}defensive_half",
+                f"{column_label}left_half",
+                f"{column_label}lowest_half",
+            ],
+            f"{filter_label}In Defensive Right Highest Half": [
+                f"{column_label}defensive_half",
+                f"{column_label}right_half",
+                f"{column_label}highest_half",
+            ],
+            f"{filter_label}In Defensive Right Lowest Half": [
+                f"{column_label}defensive_half",
+                f"{column_label}right_half",
+                f"{column_label}lowest_half",
+            ],
+            # Third intersections
+            f"{filter_label}In Offensive Left Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}left_third",
+            ],
+            f"{filter_label}In Offensive Middle Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}middle_third",
+            ],
+            f"{filter_label}In Offensive Right Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}right_third",
+            ],
+            f"{filter_label}In Neutral Left Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}left_third",
+            ],
+            f"{filter_label}In Neutral Middle Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}middle_third",
+            ],
+            f"{filter_label}In Neutral Right Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}right_third",
+            ],
+            f"{filter_label}In Defensive Left Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}left_third",
+            ],
+            f"{filter_label}In Defensive Middle Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}middle_third",
+            ],
+            f"{filter_label}In Defensive Right Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}right_third",
+            ],
+            # Third intersections with verticality
+            f"{filter_label}In Offensive Left Highest Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}left_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Offensive Middle Highest Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}middle_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Offensive Right Highest Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}right_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Neutral Left Highest Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}left_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Neutral Middle Highest Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}middle_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Neutral Right Highest Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}right_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Defensive Left Highest Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}left_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Defensive Middle Highest Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}middle_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Defensive Right Highest Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}right_third",
+                f"{column_label}highest_third",
+            ],
+            f"{filter_label}In Offensive Left Middle-Aerial Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}left_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Offensive Middle Middle-Aerial Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}middle_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Offensive Right Middle-Aerial Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}right_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Neutral Left Middle-Aerial Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}left_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Neutral Middle Middle-Aerial Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}middle_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Neutral Right Middle-Aerial Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}right_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Defensive Left Middle-Aerial Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}left_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Defensive Middle Middle-Aerial Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}middle_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Defensive Right Middle-Aerial Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}right_third",
+                f"{column_label}middle_aerial_third",
+            ],
+            f"{filter_label}In Offensive Left Lowest Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}left_third",
+                f"{column_label}lowest_third",
+            ],
+            f"{filter_label}In Offensive Middle Lowest Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}middle_third",
+                f"{column_label}lowest_third",
+            ],
+            f"{filter_label}In Offensive Right Lowest Third": [
+                f"{column_label}offensive_third",
+                f"{column_label}right_third",
+                f"{column_label}lowest_third",
+            ],
+            f"{filter_label}In Neutral Left Lowest Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}left_third",
+                f"{column_label}lowest_third",
+            ],
+            f"{filter_label}In Neutral Middle Lowest Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}middle_third",
+                f"{column_label}lowest_third",
+            ],
+            f"{filter_label}In Neutral Right Lowest Third": [
+                f"{column_label}neutral_third",
+                f"{column_label}right_third",
+                f"{column_label}lowest_third",
+            ],
+            f"{filter_label}In Defensive Left Lowest Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}left_third",
+                f"{column_label}lowest_third",
+            ],
+            f"{filter_label}In Defensive Middle Lowest Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}middle_third",
+                f"{column_label}lowest_third",
+            ],
+            f"{filter_label}In Defensive Right Lowest Third": [
+                f"{column_label}defensive_third",
+                f"{column_label}right_third",
+                f"{column_label}lowest_third",
+            ],
+            # Ball-relative positioning
+            f"{filter_label}In Front of Ball": [f"{column_label}in_front_of_ball"],
+            f"{filter_label}Behind Ball": [f"{column_label}behind_ball"],
+            # Movement state
+            f"{filter_label}Grounded": [f"{column_label}grounded"],
+            f"{filter_label}Airborne": [f"{column_label}airborne"],
+            # Surfaces
+            f"{filter_label}On Ceiling": [f"{column_label}on_ceiling"],
+            f"{filter_label}On Left Wall": [f"{column_label}on_left_wall"],
+            f"{filter_label}On Right Wall": [f"{column_label}on_right_wall"],
+            f"{filter_label}On Back Wall": [f"{column_label}on_back_wall"],
+            f"{filter_label}On Front Wall": [f"{column_label}on_front_wall"],
+            # Goal zones
+            f"{filter_label}In Own Goal": [f"{column_label}in_own_goal"],
+            f"{filter_label}In Opponents Goal": [f"{column_label}in_opponents_goal"],
+        }
+        for label, cols in positioning_columns.items():
+            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
+            features[f"{filter_label}Percent Time {label}"] = perc
+            features[f"{filter_label}Average Stint {label}"] = avg_stint
+
+        speed_columns = {
+            f"{filter_label}Stationary": [f"{column_label}is_still"],
+            f"{filter_label}Slow": [f"{column_label}is_slow"],
+            f"{filter_label}Semi-Slow": [f"{column_label}is_semi_slow"],
+            f"{filter_label}Medium Speed": [f"{column_label}is_slow"],
+            f"{filter_label}Semi-Fast": [f"{column_label}is_semi_fast"],
+            f"{filter_label}Drive Speed": [f"{column_label}is_drive_speed"],
+            f"{filter_label}Boost Speed": [f"{column_label}is_supersonic"],
+            f"{filter_label}Supersonic": [f"{column_label}is_supersonic"],
+        }
+        for label, cols in speed_columns.items():
+            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
+            features[f"{filter_label}Percent Time while {label}"] = perc
+            features[f"{filter_label}Average Stint while {label}"] = avg_stint
+
+        return features
+
     def extract_round_features(
         self,
         game: pd.DataFrame,
@@ -243,363 +855,17 @@ class Rocket_League_Feature_Extractor:
             "round": round,
         }
 
-        distance_cols = self.extract_distances(game, player_names, main_player)
-        field_positioning_cols = self.extract_field_positioning(
-            game, player_names, main_player
+        self.add_features_to_result(
+            column_label="",
+            filter_label="",
+            features=features,
+            main_player=main_player,
+            player_names=player_names,
+            game=game,
+            teams=teams,
+            main_player_team=main_player_team,
+            opponents_team=opponents_team,
         )
-        speed_cols = self.extract_speeds(game, player_names, main_player)
-
-        game = pd.concat(
-            [
-                game,
-                pd.DataFrame(
-                    distance_cols | field_positioning_cols | speed_cols,
-                    index=game.index,
-                ),
-            ],
-            axis=1,
-        )
-
-        ball_distance_cols = [
-            c for c in distance_cols.keys() if c.endswith("_distance_to_ball")
-        ]
-        dependent_cols: Dict[str, pd.DataFrame | pd.Series] = {}
-        dependent_cols[f"{main_player}_closest_to_ball"] = game[
-            f"{main_player}_distance_to_ball"
-        ] == game[ball_distance_cols].min(axis=1)
-        dependent_cols[f"{main_player}_farthest_from_ball"] = game[
-            f"{main_player}_distance_to_ball"
-        ] == game[ball_distance_cols].max(axis=1)
-        # Wall checks, excluding goal occupancy
-        dependent_cols[f"{main_player}_on_back_wall"] = (
-            game[f"{main_player}_positioning_y"] <= -(Y_WALL - TOL)
-        ) & (~game[f"{main_player}_in_own_goal"])
-        dependent_cols[f"{main_player}_on_front_wall"] = (
-            game[f"{main_player}_positioning_y"] >= (Y_WALL - TOL)
-        ) & (~game[f"{main_player}_in_opponents_goal"])
-
-        dependent_cols[f"{main_player}_is_still"] = (
-            game[f"{main_player}_positioning_linear_velocity"] <= 10
-        )
-        dependent_cols[f"{main_player}_is_slow"] = (
-            game[f"{main_player}_positioning_linear_velocity"] <= 500
-        )
-        dependent_cols[f"{main_player}_is_semi_slow"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 500
-        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 1000)
-        dependent_cols[f"{main_player}_is_medium_speed"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 1000
-        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 1500)
-        dependent_cols[f"{main_player}_is_semi_fast"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 1500
-        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 2000)
-        dependent_cols[f"{main_player}_is_fast"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 2000
-        )
-
-        dependent_cols[f"{main_player}_is_drive_speed"] = (
-            game[f"{main_player}_positioning_linear_velocity"] <= 1410
-        )
-        dependent_cols[f"{main_player}_is_boost_speed"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 1410
-        ) & (game[f"{main_player}_positioning_linear_velocity"] < 2200)
-        dependent_cols[f"{main_player}_is_supersonic"] = (
-            game[f"{main_player}_positioning_linear_velocity"] >= 2200
-        )
-
-        game = pd.concat([game, pd.DataFrame(dependent_cols, index=game.index)], axis=1)
-        game.loc[:, f"{main_player}_airborne"] = ~(
-            game[f"{main_player}_grounded"]
-            | game[f"{main_player}_on_ceiling"]
-            | game[f"{main_player}_on_left_wall"]
-            | game[f"{main_player}_on_right_wall"]
-            | game[f"{main_player}_on_back_wall"]
-            | game[f"{main_player}_on_front_wall"]
-        )
-
-        movement_columns: Dict[str, List[str]] = {"Drifting": ["drift_active"]}
-        for label, cols in movement_columns.items():
-            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"Percent Time while {label}"] = perc
-            features[f"Average Stint while {label}"] = avg_stint
-
-        distance_columns: Dict[str, List[str]] = {
-            "Closest to Ball": ["closest_to_ball"],
-            "Farthest from Ball": ["farthest_from_ball"],
-        }
-        for label, cols in distance_columns.items():
-            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"Percent Time while {label}"] = perc
-            features[f"Average Stint while {label}"] = avg_stint
-        avg_distance_to_ball = game[f"{main_player}_distance_to_ball"].mean()
-        features["Average Distance to Ball"] = (
-            avg_distance_to_ball / TOTAL_FIELD_DISTANCE
-        )
-        teammate_distances = [
-            f"{main_player}_distance_to_{teammate}"
-            for teammate in teams[main_player_team]
-            if teammate != main_player
-        ]
-        avg_distance_to_teammates = game[teammate_distances].mean(axis=1).mean()
-        features["Average Distance to Teammates"] = (
-            avg_distance_to_teammates / TOTAL_FIELD_DISTANCE
-        )
-        opponent_distances = [
-            f"{main_player}_distance_to_{opponent}"
-            for opponent in teams[opponents_team]
-        ]
-        avg_distance_to_opponents = game[opponent_distances].mean(axis=1).mean()
-        features["Average Distance to Opponents"] = (
-            avg_distance_to_opponents / TOTAL_FIELD_DISTANCE
-        )
-
-        positioning_columns = {
-            # Halves
-            "In Offensive Half": ["offensive_half"],
-            "In Defensive Half": ["defensive_half"],
-            "In Left Half": ["left_half"],
-            "In Right Half": ["right_half"],
-            "In Highest Half": ["highest_half"],
-            "In Lowest Half": ["lowest_half"],
-            # Thirds (longitudinal)
-            "In Offensive Third": ["offensive_third"],
-            "In Neutral Third": ["neutral_third"],
-            "In Defensive Third": ["defensive_third"],
-            # Thirds (lateral)
-            "In Left Third": ["left_third"],
-            "In Middle Third": ["middle_third"],
-            "In Right Third": ["right_third"],
-            # Third (Vertical)
-            "In Highest Third": ["highest_third"],
-            "In Middle Aerial Third": ["middle_aerial_third"],
-            "In Lowest Third": ["lowest_third"],
-            # Half intersections
-            "In Offensive Left Half": ["offensive_half", "left_half"],
-            "In Offensive Right Half": ["offensive_half", "right_half"],
-            "In Defensive Left Half": ["defensive_half", "left_half"],
-            "In Defensive Right Half": ["defensive_half", "right_half"],
-            # Half intersections with verticality
-            "In Offensive Left Highest Half": [
-                "offensive_half",
-                "left_half",
-                "highest_half",
-            ],
-            "In Offensive Left Lowest Half": [
-                "offensive_half",
-                "left_half",
-                "lowest_half",
-            ],
-            "In Offensive Right Highest Half": [
-                "offensive_half",
-                "right_half",
-                "highest_half",
-            ],
-            "In Offensive Right Lowest Half": [
-                "offensive_half",
-                "right_half",
-                "lowest_half",
-            ],
-            "In Defensive Left Highest Half": [
-                "defensive_half",
-                "left_half",
-                "highest_half",
-            ],
-            "In Defensive Left Lowest Half": [
-                "defensive_half",
-                "left_half",
-                "lowest_half",
-            ],
-            "In Defensive Right Highest Half": [
-                "defensive_half",
-                "right_half",
-                "highest_half",
-            ],
-            "In Defensive Right Lowest Half": [
-                "defensive_half",
-                "right_half",
-                "lowest_half",
-            ],
-            # Third intersections
-            "In Offensive Left Third": ["offensive_third", "left_third"],
-            "In Offensive Middle Third": ["offensive_third", "middle_third"],
-            "In Offensive Right Third": ["offensive_third", "right_third"],
-            "In Neutral Left Third": ["neutral_third", "left_third"],
-            "In Neutral Middle Third": ["neutral_third", "middle_third"],
-            "In Neutral Right Third": ["neutral_third", "right_third"],
-            "In Defensive Left Third": ["defensive_third", "left_third"],
-            "In Defensive Middle Third": ["defensive_third", "middle_third"],
-            "In Defensive Right Third": ["defensive_third", "right_third"],
-            # Third intersections with verticality
-            "In Offensive Left Highest Third": [
-                "offensive_third",
-                "left_third",
-                "highest_third",
-            ],
-            "In Offensive Middle Highest Third": [
-                "offensive_third",
-                "middle_third",
-                "highest_third",
-            ],
-            "In Offensive Right Highest Third": [
-                "offensive_third",
-                "right_third",
-                "highest_third",
-            ],
-            "In Neutral Left Highest Third": [
-                "neutral_third",
-                "left_third",
-                "highest_third",
-            ],
-            "In Neutral Middle Highest Third": [
-                "neutral_third",
-                "middle_third",
-                "highest_third",
-            ],
-            "In Neutral Right Highest Third": [
-                "neutral_third",
-                "right_third",
-                "highest_third",
-            ],
-            "In Defensive Left Highest Third": [
-                "defensive_third",
-                "left_third",
-                "highest_third",
-            ],
-            "In Defensive Middle Highest Third": [
-                "defensive_third",
-                "middle_third",
-                "highest_third",
-            ],
-            "In Defensive Right Highest Third": [
-                "defensive_third",
-                "right_third",
-                "highest_third",
-            ],
-            "In Offensive Left Middle-Aerial Third": [
-                "offensive_third",
-                "left_third",
-                "middle_aerial_third",
-            ],
-            "In Offensive Middle Middle-Aerial Third": [
-                "offensive_third",
-                "middle_third",
-                "middle_aerial_third",
-            ],
-            "In Offensive Right Middle-Aerial Third": [
-                "offensive_third",
-                "right_third",
-                "middle_aerial_third",
-            ],
-            "In Neutral Left Middle-Aerial Third": [
-                "neutral_third",
-                "left_third",
-                "middle_aerial_third",
-            ],
-            "In Neutral Middle Middle-Aerial Third": [
-                "neutral_third",
-                "middle_third",
-                "middle_aerial_third",
-            ],
-            "In Neutral Right Middle-Aerial Third": [
-                "neutral_third",
-                "right_third",
-                "middle_aerial_third",
-            ],
-            "In Defensive Left Middle-Aerial Third": [
-                "defensive_third",
-                "left_third",
-                "middle_aerial_third",
-            ],
-            "In Defensive Middle Middle-Aerial Third": [
-                "defensive_third",
-                "middle_third",
-                "middle_aerial_third",
-            ],
-            "In Defensive Right Middle-Aerial Third": [
-                "defensive_third",
-                "right_third",
-                "middle_aerial_third",
-            ],
-            "In Offensive Left Lowest Third": [
-                "offensive_third",
-                "left_third",
-                "lowest_third",
-            ],
-            "In Offensive Middle Lowest Third": [
-                "offensive_third",
-                "middle_third",
-                "lowest_third",
-            ],
-            "In Offensive Right Lowest Third": [
-                "offensive_third",
-                "right_third",
-                "lowest_third",
-            ],
-            "In Neutral Left Lowest Third": [
-                "neutral_third",
-                "left_third",
-                "lowest_third",
-            ],
-            "In Neutral Middle Lowest Third": [
-                "neutral_third",
-                "middle_third",
-                "lowest_third",
-            ],
-            "In Neutral Right Lowest Third": [
-                "neutral_third",
-                "right_third",
-                "lowest_third",
-            ],
-            "In Defensive Left Lowest Third": [
-                "defensive_third",
-                "left_third",
-                "lowest_third",
-            ],
-            "In Defensive Middle Lowest Third": [
-                "defensive_third",
-                "middle_third",
-                "lowest_third",
-            ],
-            "In Defensive Right Lowest Third": [
-                "defensive_third",
-                "right_third",
-                "lowest_third",
-            ],
-            # Ball-relative positioning
-            "In Front of Ball": ["in_front_of_ball"],
-            "Behind Ball": ["behind_ball"],
-            # Movement state
-            "Grounded": ["grounded"],
-            "Airborne": ["airborne"],
-            # Surfaces
-            "On Ceiling": ["on_ceiling"],
-            "On Left Wall": ["on_left_wall"],
-            "On Right Wall": ["on_right_wall"],
-            "On Back Wall": ["on_back_wall"],
-            "On Front Wall": ["on_front_wall"],
-            # Goal zones
-            "In Own Goal": ["in_own_goal"],
-            "In Opponents Goal": ["in_opponents_goal"],
-        }
-        for label, cols in positioning_columns.items():
-            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"Percent Time {label}"] = perc
-            features[f"Average Stint {label}"] = avg_stint
-
-        speed_columns = {
-            "Stationary": ["is_still"],
-            "Slow": ["is_slow"],
-            "Semi-Slow": ["is_semi_slow"],
-            "Medium Speed": ["is_slow"],
-            "Semi-Fast": ["is_semi_fast"],
-            "Drive Speed": ["is_drive_speed"],
-            "Boost Speed": ["is_supersonic"],
-            "Supersonic": ["is_supersonic"],
-        }
-        for label, cols in speed_columns.items():
-            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"Percent Time while {label}"] = perc
-            features[f"Average Stint while {label}"] = avg_stint
 
         return features
 
@@ -632,7 +898,7 @@ class Rocket_League_Feature_Extractor:
             # TODO: add flip y for rotation
 
         id = game["id"].iloc[0]
-        rounds = game["round"].unique()
+        rounds: NDArray[np.int_] = game["round"].unique()  # type: ignore
         for round in rounds:
             round = cast(int, round)
             round_features = self.extract_round_features(
@@ -672,7 +938,7 @@ class Rocket_League_Feature_Extractor:
                 feature_labels = list(features[0].keys())
 
         # --- Write filtered rows to CSV ---
-        filtered_features = [
+        features = [
             {k: feat[k] for k in feature_labels if k in feat} for feat in features
         ]
 
@@ -680,7 +946,7 @@ class Rocket_League_Feature_Extractor:
             writer = csv.DictWriter(f, fieldnames=feature_labels)
             if write_header:
                 writer.writeheader()
-            writer.writerows(filtered_features)
+            writer.writerows(features)
         return None
 
     def load_features(self):
@@ -741,7 +1007,9 @@ class Rocket_League_Feature_Extractor:
                     for player in players:
                         game_features = self.extract_game_features(game.copy(), player)
                         if save_output:
-                            self.save_features(features, features_path, labels_path)
+                            self.save_features(
+                                game_features, features_path, labels_path
+                            )
                         else:
                             features += game_features
 
