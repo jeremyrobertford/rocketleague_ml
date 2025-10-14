@@ -2,11 +2,21 @@ import os
 import csv
 import json
 from pathlib import Path
-from typing import cast, Any, Dict, List, Union
+from typing import cast, Any, Dict, List, Union, TypedDict
 import pandas as pd
 import numpy as np
 from numpy.typing import NDArray
 from rocketleague_ml.models.frame_by_frame_processor import Frame_By_Frame_Processor
+from rocketleague_ml.models.feature_extractor.extractors import (
+    get_player_rotation_cols,
+    get_simple_player_rotation_cols,
+    get_boost_usage_cols,
+)
+from rocketleague_ml.models.feature_extractor.aggregators import (
+    aggregate_boost_usage,
+    aggregate_player_rotations,
+    aggregate_field_positioning,
+)
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.config import (
     DTYPES,
@@ -25,10 +35,31 @@ from rocketleague_ml.config import (
 )
 
 
+class Config(TypedDict):
+    include_touch_types: bool
+    include_field_positioning: bool
+    include_distancing: bool
+    include_speed: bool
+    include_possession: bool
+    include_pressure: bool
+    include_player_rotations: bool
+    include_boost_usage: bool
+
+
 class Rocket_League_Feature_Extractor:
     def __init__(self, processor: Frame_By_Frame_Processor, logger: Logger = Logger()):
         self.processor = processor
         self.logger = logger
+        self.config: Config = {
+            "include_touch_types": True,
+            "include_field_positioning": True,
+            "include_distancing": True,
+            "include_speed": True,
+            "include_possession": True,
+            "include_pressure": True,
+            "include_player_rotations": True,
+            "include_boost_usage": True,
+        }
 
     def get_player_names_and_teams(self, game: pd.DataFrame):
         cols = game.columns
@@ -248,17 +279,13 @@ class Rocket_League_Feature_Extractor:
         """
 
         # --- Masks for main_player ---
-        first_man_mask = game[f"{main_player}_{column_label}simple_first_man"].astype(
-            bool
-        )
-        player_poss = game[f"{main_player}_{column_label}in_possession"].astype(bool)
-        player_contested = game[
-            f"{main_player}_{column_label}in_contested_possession"
-        ].astype(bool)
+        first_man_mask = game[f"{main_player}_simple_first_man"].astype(bool)
+        player_poss = game[f"{main_player}_in_possession"].astype(bool)
+        player_contested = game[f"{main_player}_in_contested_possession"].astype(bool)
         player_take_or_contest = player_poss | player_contested
         player_rotate_mask = ~first_man_mask & (
-            (game[f"{main_player}_{column_label}simple_second_man"])
-            | (game[f"{main_player}_{column_label}simple_third_man"])
+            (game[f"{main_player}_simple_second_man"])
+            | (game[f"{main_player}_simple_third_man"])
         )
 
         # --- Opponent team ---
@@ -280,27 +307,25 @@ class Rocket_League_Feature_Extractor:
         total_first_man = first_man_frames.sum()
 
         if total_first_man == 0:
-            features[f"{filter_label}Percentage Possession Taken as First Man"] = 0
-            features[f"{filter_label}Percentage Possession Contested as First Man"] = 0
-            features[f"{filter_label}Percentage Possession Challenged as First Man"] = 0
-            features[f"{filter_label}Percentage Rotated as First Man"] = 0
+            features["Percentage Possession Taken as First Man"] = 0
+            features["Percentage Possession Contested as First Man"] = 0
+            features["Percentage Possession Challenged as First Man"] = 0
+            features["Percentage Rotated as First Man"] = 0
+            features["Percentage Opponent Has Possession Before Taken as First Man"] = 0
             features[
-                f"{filter_label}Percentage Opponent Has Possession Before Taken as First Man"
+                "Average Stint Opponent Has Possession Before Taken as First Man"
             ] = 0
             features[
-                f"{filter_label}Average Stint Opponent Has Possession Before Taken as First Man"
+                "Percentage Opponent Has Possession Before Contested as First Man"
             ] = 0
             features[
-                f"{filter_label}Percentage Opponent Has Possession Before Contested as First Man"
+                "Average Stint Opponent Has Possession Before Contested as First Man"
             ] = 0
             features[
-                f"{filter_label}Average Stint Opponent Has Possession Before Contested as First Man"
+                "Percentage Opponent Has Possession Before Challenged as First Man"
             ] = 0
             features[
-                f"{filter_label}Percentage Opponent Has Possession Before Challenged as First Man"
-            ] = 0
-            features[
-                f"{filter_label}Average Stint Opponent Has Possession Before Challenged as First Man"
+                "Average Stint Opponent Has Possession Before Challenged as First Man"
             ] = 0
             return features
 
@@ -310,16 +335,16 @@ class Rocket_League_Feature_Extractor:
         take_or_contest_mask = first_man_frames & player_take_or_contest
         rotate_mask = first_man_frames & player_rotate_mask
 
-        features[f"{filter_label}Percentage Possession Taken as First Man"] = (
+        features["Percentage Possession Taken as First Man"] = (
             take_mask.sum() / total_first_man
         )
-        features[f"{filter_label}Percentage Possession Contested as First Man"] = (
+        features["Percentage Possession Contested as First Man"] = (
             contest_mask.sum() / total_first_man
         )
-        features[f"{filter_label}Percentage Possession Challenged as First Man"] = (
+        features["Percentage Possession Challenged as First Man"] = (
             take_or_contest_mask.sum() / total_first_man
         )
-        features[f"{filter_label}Percentage Rotated as First Man"] = (
+        features["Percentage Rotated as First Man"] = (
             rotate_mask.sum() / total_first_man
         )
 
@@ -391,21 +416,19 @@ class Rocket_League_Feature_Extractor:
             return perc_total, perc_avg_stint
 
         # ---- Player possession ----
-        player_poss = game[f"{main_player}_{column_label}in_possession"].astype(bool)
-        player_contested = game[f"{main_player}_{column_label}in_possession"].astype(
-            bool
-        ) | game[f"{main_player}_{column_label}in_contested_possession"].astype(bool)
+        player_poss = game[f"{main_player}_in_possession"].astype(bool)
+        player_contested = game[f"{main_player}_in_possession"].astype(bool) | game[
+            f"{main_player}_in_contested_possession"
+        ].astype(bool)
 
         # Player possession metrics
         perc_poss, perc_stint_poss = compute_stats(player_poss)
         perc_contested, perc_stint_contested = compute_stats(player_contested)
 
-        features[f"{filter_label}With Possession"] = perc_poss
-        features[f"{filter_label}With Contested Possession"] = perc_contested
-        features[f"{filter_label}Average Stint With Possession"] = perc_stint_poss
-        features[f"{filter_label}Average Stint With Contested Possession"] = (
-            perc_stint_contested
-        )
+        features["With Possession"] = perc_poss
+        features["With Contested Possession"] = perc_contested
+        features["Average Stint With Possession"] = perc_stint_poss
+        features["Average Stint With Contested Possession"] = perc_stint_contested
 
         # ---- Team possession ----
         team_poss = game[[f"{p}_in_possession" for p in team_players]].any(axis=1)
@@ -416,34 +439,28 @@ class Rocket_League_Feature_Extractor:
         perc_team_poss, perc_stint_team_poss = compute_stats(team_poss)
         perc_team_contested, perc_stint_team_contested = compute_stats(team_contested)
 
-        features[f"{filter_label}Team in Possession"] = perc_team_poss
-        features[f"{filter_label}Team in Contested Possession"] = perc_team_contested
-        features[f"{filter_label}Average Stint Team in Possession"] = (
-            perc_stint_team_poss
-        )
-        features[f"{filter_label}Average Stint Team in Contested Possession"] = (
+        features["Team in Possession"] = perc_team_poss
+        features["Team in Contested Possession"] = perc_team_contested
+        features["Average Stint Team in Possession"] = perc_stint_team_poss
+        features["Average Stint Team in Contested Possession"] = (
             perc_stint_team_contested
         )
 
         # ---- Offensive pressure ----
         # Pressure = possession in offensive half
-        offensive_mask = game[f"{main_player}_{column_label}offensive_half"].astype(
-            bool
-        )
+        offensive_mask = game[f"{main_player}_offensive_half"].astype(bool)
         player_offense = player_poss & offensive_mask
         player_offense_contested = player_contested & offensive_mask
         perc_offense, perc_stint_offense = compute_stats(player_offense)
         perc_offense_contested, perc_stint_offense_contested = compute_stats(
             player_offense_contested
         )
-        features[f"{filter_label}Percentage With Offensive Pressure"] = perc_offense
-        features[f"{filter_label}Percentage With Offensive Contested Pressure"] = (
+        features["Percentage With Offensive Pressure"] = perc_offense
+        features["Percentage With Offensive Contested Pressure"] = (
             perc_offense_contested
         )
-        features[f"{filter_label}Average Stint With Offensive Pressure"] = (
-            perc_stint_offense
-        )
-        features[f"{filter_label}Average Stint With Offensive Contested Pressure"] = (
+        features["Average Stint With Offensive Pressure"] = perc_stint_offense
+        features["Average Stint With Offensive Contested Pressure"] = (
             perc_stint_offense_contested
         )
 
@@ -453,21 +470,15 @@ class Rocket_League_Feature_Extractor:
         perc_team_offense_contested, perc_stint_team_offense_contested = compute_stats(
             team_offense_contested
         )
-        features[f"{filter_label}Team With Offensive Pressure"] = perc_team_offense
-        features[f"{filter_label}Team with Offensive Contested Pressure"] = (
-            perc_team_offense_contested
+        features["Team With Offensive Pressure"] = perc_team_offense
+        features["Team with Offensive Contested Pressure"] = perc_team_offense_contested
+        features["Average Stint Team With Offensive Pressure"] = perc_stint_team_offense
+        features["Average Stint Team with Offensive Contested Pressure"] = (
+            perc_stint_team_offense_contested
         )
-        features[f"{filter_label}Average Stint Team With Offensive Pressure"] = (
-            perc_stint_team_offense
-        )
-        features[
-            f"{filter_label}Average Stint Team with Offensive Contested Pressure"
-        ] = perc_stint_team_offense_contested
 
         # ---- Defensive pressure (opponent in possession in defensive half) ----
-        defensive_mask = game[f"{main_player}_{column_label}defensive_half"].astype(
-            bool
-        )
+        defensive_mask = game[f"{main_player}_defensive_half"].astype(bool)
         opponent_poss = game[[f"{p}_in_possession" for p in opponent_players]].any(
             axis=1
         )
@@ -477,21 +488,17 @@ class Rocket_League_Feature_Extractor:
         perc_opp_poss, perc_stint_opp_poss = compute_stats(opponent_poss)
         perc_opp_contested, perc_stint_opp_contested = compute_stats(opponent_contested)
 
-        features[f"{filter_label}Opponent Team in Possession"] = perc_opp_poss
-        features[f"{filter_label}Opponent Team in Contested Possession"] = (
-            perc_opp_contested
+        features["Opponent Team in Possession"] = perc_opp_poss
+        features["Opponent Team in Contested Possession"] = perc_opp_contested
+        features["Average Stint Team in Opponent Possession"] = perc_stint_opp_poss
+        features["Average Stint Team in Opponent Contested Possession"] = (
+            perc_stint_opp_contested
         )
-        features[f"{filter_label}Average Stint Team in Opponent Possession"] = (
-            perc_stint_opp_poss
-        )
-        features[
-            f"{filter_label}Average Stint Team in Opponent Contested Possession"
-        ] = perc_stint_opp_contested
 
         perc_defense, _ = compute_stats(opponent_poss & defensive_mask)
         perc_defense_contested, _ = compute_stats(opponent_contested & defensive_mask)
-        features[f"{filter_label}{main_player}_perc_defensive_pressure"] = perc_defense
-        features[f"{filter_label}{main_player}_perc_defensive_contested_pressure"] = (
+        features["{main_player}_perc_defensive_pressure"] = perc_defense
+        features["{main_player}_perc_defensive_contested_pressure"] = (
             perc_defense_contested
         )
 
@@ -710,9 +717,7 @@ class Rocket_League_Feature_Extractor:
                     # Determine label
                     if (
                         next_touch_time - start_time <= possession_threshold
-                        or game.loc[
-                            end_idx, f"{column_label}contested_simple_possession"
-                        ]
+                        or game.loc[end_idx, "contested_simple_possession"]
                     ):
                         contested[start_idx : end_idx + 1, p_idx] = 1
                     else:
@@ -837,7 +842,9 @@ class Rocket_League_Feature_Extractor:
         teams: Dict[str, List[str]],
         column_label: str = "",
         filter_label: str = "",
+        config: Config | None = None,
     ) -> Dict[str, Any]:
+        config = config or self.config
         main_player_team = next(
             (t for t, players in teams.items() if main_player in players), None
         )
@@ -845,355 +852,86 @@ class Rocket_League_Feature_Extractor:
             raise ValueError("No team found")
         opponent_team = "Orange" if main_player_team == "Blue" else "Blue"
         features: Dict[str, Any] = {}
-        total_touches = game[f"{main_player}_{column_label}touch_total"].sum()
-        features[f"{filter_label}Fifty-Fifty Touch Percentage"] = (
-            game[f"{main_player}_{column_label}touch_fifty_fifty"].sum() / total_touches
+        total_touches = game[f"{main_player}_touch_total"].sum()
+        features["Fifty-Fifty Touch Percentage"] = (
+            game[f"{main_player}_touch_fifty_fifty"].sum() / total_touches
         )
-        features[f"{filter_label}Towards Goal Touch Percentage"] = (
-            game[f"{main_player}_{column_label}touch_towards_goal"].sum()
-            / total_touches
+        features["Towards Goal Touch Percentage"] = (
+            game[f"{main_player}_touch_towards_goal"].sum() / total_touches
         )
-        features[f"{filter_label}Towards Teammate Touch Percentage"] = (
-            game[f"{main_player}_{column_label}touch_towards_teammate"].sum()
-            / total_touches
+        features["Towards Teammate Touch Percentage"] = (
+            game[f"{main_player}_touch_towards_teammate"].sum() / total_touches
         )
-        features[f"{filter_label}Towards Opponent Touch Percentage"] = (
-            game[f"{main_player}_{column_label}touch_towards_opponent"].sum()
-            / total_touches
+        features["Towards Opponent Touch Percentage"] = (
+            game[f"{main_player}_touch_towards_opponent"].sum() / total_touches
         )
-        features[f"{filter_label}Towards Open Space Touch Percentage"] = (
-            game[f"{main_player}_{column_label}touch_towards_open_space"].sum()
-            / total_touches
+        features["Towards Open Space Touch Percentage"] = (
+            game[f"{main_player}_touch_towards_open_space"].sum() / total_touches
         )
 
         movement_columns: Dict[str, List[str]] = {
-            # f"{filter_label}Drifting": [f"{column_label}drift_active"]
+            # "Drifting": ["drift_active"]
         }
         for label, cols in movement_columns.items():
             perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"{filter_label}Percent Time while {label}"] = perc
-            features[f"{filter_label}Average Stint while {label}"] = avg_stint
+            features[f"Percent Time while {label}"] = perc
+            features[f"Average Stint while {label}"] = avg_stint
 
         distance_columns: Dict[str, List[str]] = {
-            f"{filter_label}Closest to Ball": [f"{column_label}closest_to_ball"],
-            f"{filter_label}Farthest from Ball": [f"{column_label}farthest_from_ball"],
+            "Closest to Ball": ["closest_to_ball"],
+            "Farthest from Ball": ["farthest_from_ball"],
         }
         for label, cols in distance_columns.items():
             perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"{filter_label}Percent Time while {label}"] = perc
-            features[f"{filter_label}Average Stint while {label}"] = avg_stint
-        avg_distance_to_ball = game[
-            f"{main_player}_{column_label}distance_to_ball"
-        ].mean()
-        features[f"{filter_label}Average Distance to Ball"] = (
+            features[f"Percent Time while {label}"] = perc
+            features[f"Average Stint while {label}"] = avg_stint
+        avg_distance_to_ball = game[f"{main_player}_distance_to_ball"].mean()
+        features["Average Distance to Ball"] = (
             avg_distance_to_ball / TOTAL_FIELD_DISTANCE
         )
         teammate_distances = [
-            f"{main_player}_{column_label}distance_to_{teammate}"
+            f"{main_player}_distance_to_{teammate}"
             for teammate in teams[main_player_team]
             if teammate != main_player
         ]
         avg_distance_to_teammates = game[teammate_distances].mean(axis=1).mean()
-        features[f"{filter_label}Average Distance to Teammates"] = (
+        features["Average Distance to Teammates"] = (
             avg_distance_to_teammates / TOTAL_FIELD_DISTANCE
         )
         opponent_distances = [
-            f"{main_player}_{column_label}distance_to_{opponent}"
-            for opponent in teams[opponent_team]
+            f"{main_player}_distance_to_{opponent}" for opponent in teams[opponent_team]
         ]
         avg_distance_to_opponents = game[opponent_distances].mean(axis=1).mean()
-        features[f"{filter_label}Average Distance to Opponents"] = (
+        features["Average Distance to Opponents"] = (
             avg_distance_to_opponents / TOTAL_FIELD_DISTANCE
         )
 
-        positioning_columns = {
-            # Halves
-            f"{filter_label}In Offensive Half": [f"{column_label}offensive_half"],
-            f"{filter_label}In Defensive Half": [f"{column_label}defensive_half"],
-            f"{filter_label}In Left Half": [f"{column_label}left_half"],
-            f"{filter_label}In Right Half": [f"{column_label}right_half"],
-            f"{filter_label}In Highest Half": [f"{column_label}highest_half"],
-            f"{filter_label}In Lowest Half": [f"{column_label}lowest_half"],
-            # Thirds (longitudinal)
-            f"{filter_label}In Offensive Third": [f"{column_label}offensive_third"],
-            f"{filter_label}In Neutral Third": [f"{column_label}neutral_third"],
-            f"{filter_label}In Defensive Third": [f"{column_label}defensive_third"],
-            # Thirds (lateral)
-            f"{filter_label}In Left Third": [f"{column_label}left_third"],
-            f"{filter_label}In Middle Third": [f"{column_label}middle_third"],
-            f"{filter_label}In Right Third": [f"{column_label}right_third"],
-            # Third (Vertical)
-            f"{filter_label}In Highest Third": [f"{column_label}highest_third"],
-            f"{filter_label}In Middle Aerial Third": [
-                f"{column_label}middle_aerial_third"
-            ],
-            f"{filter_label}In Lowest Third": [f"{column_label}lowest_third"],
-            # Half intersections
-            f"{filter_label}In Offensive Left Half": [
-                f"{column_label}offensive_half",
-                f"{column_label}left_half",
-            ],
-            f"{filter_label}In Offensive Right Half": [
-                f"{column_label}offensive_half",
-                f"{column_label}right_half",
-            ],
-            f"{filter_label}In Defensive Left Half": [
-                f"{column_label}defensive_half",
-                f"{column_label}left_half",
-            ],
-            f"{filter_label}In Defensive Right Half": [
-                f"{column_label}defensive_half",
-                f"{column_label}right_half",
-            ],
-            # Half intersections with verticality
-            f"{filter_label}In Offensive Left Highest Half": [
-                f"{column_label}offensive_half",
-                f"{column_label}left_half",
-                f"{column_label}highest_half",
-            ],
-            f"{filter_label}In Offensive Left Lowest Half": [
-                f"{column_label}offensive_half",
-                f"{column_label}left_half",
-                f"{column_label}lowest_half",
-            ],
-            f"{filter_label}In Offensive Right Highest Half": [
-                f"{column_label}offensive_half",
-                f"{column_label}right_half",
-                f"{column_label}highest_half",
-            ],
-            f"{filter_label}In Offensive Right Lowest Half": [
-                f"{column_label}offensive_half",
-                f"{column_label}right_half",
-                f"{column_label}lowest_half",
-            ],
-            f"{filter_label}In Defensive Left Highest Half": [
-                f"{column_label}defensive_half",
-                f"{column_label}left_half",
-                f"{column_label}highest_half",
-            ],
-            f"{filter_label}In Defensive Left Lowest Half": [
-                f"{column_label}defensive_half",
-                f"{column_label}left_half",
-                f"{column_label}lowest_half",
-            ],
-            f"{filter_label}In Defensive Right Highest Half": [
-                f"{column_label}defensive_half",
-                f"{column_label}right_half",
-                f"{column_label}highest_half",
-            ],
-            f"{filter_label}In Defensive Right Lowest Half": [
-                f"{column_label}defensive_half",
-                f"{column_label}right_half",
-                f"{column_label}lowest_half",
-            ],
-            # Third intersections
-            f"{filter_label}In Offensive Left Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}left_third",
-            ],
-            f"{filter_label}In Offensive Middle Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}middle_third",
-            ],
-            f"{filter_label}In Offensive Right Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}right_third",
-            ],
-            f"{filter_label}In Neutral Left Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}left_third",
-            ],
-            f"{filter_label}In Neutral Middle Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}middle_third",
-            ],
-            f"{filter_label}In Neutral Right Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}right_third",
-            ],
-            f"{filter_label}In Defensive Left Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}left_third",
-            ],
-            f"{filter_label}In Defensive Middle Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}middle_third",
-            ],
-            f"{filter_label}In Defensive Right Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}right_third",
-            ],
-            # Third intersections with verticality
-            f"{filter_label}In Offensive Left Highest Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}left_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Offensive Middle Highest Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}middle_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Offensive Right Highest Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}right_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Neutral Left Highest Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}left_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Neutral Middle Highest Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}middle_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Neutral Right Highest Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}right_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Defensive Left Highest Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}left_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Defensive Middle Highest Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}middle_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Defensive Right Highest Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}right_third",
-                f"{column_label}highest_third",
-            ],
-            f"{filter_label}In Offensive Left Middle-Aerial Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}left_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Offensive Middle Middle-Aerial Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}middle_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Offensive Right Middle-Aerial Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}right_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Neutral Left Middle-Aerial Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}left_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Neutral Middle Middle-Aerial Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}middle_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Neutral Right Middle-Aerial Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}right_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Defensive Left Middle-Aerial Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}left_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Defensive Middle Middle-Aerial Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}middle_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Defensive Right Middle-Aerial Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}right_third",
-                f"{column_label}middle_aerial_third",
-            ],
-            f"{filter_label}In Offensive Left Lowest Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}left_third",
-                f"{column_label}lowest_third",
-            ],
-            f"{filter_label}In Offensive Middle Lowest Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}middle_third",
-                f"{column_label}lowest_third",
-            ],
-            f"{filter_label}In Offensive Right Lowest Third": [
-                f"{column_label}offensive_third",
-                f"{column_label}right_third",
-                f"{column_label}lowest_third",
-            ],
-            f"{filter_label}In Neutral Left Lowest Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}left_third",
-                f"{column_label}lowest_third",
-            ],
-            f"{filter_label}In Neutral Middle Lowest Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}middle_third",
-                f"{column_label}lowest_third",
-            ],
-            f"{filter_label}In Neutral Right Lowest Third": [
-                f"{column_label}neutral_third",
-                f"{column_label}right_third",
-                f"{column_label}lowest_third",
-            ],
-            f"{filter_label}In Defensive Left Lowest Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}left_third",
-                f"{column_label}lowest_third",
-            ],
-            f"{filter_label}In Defensive Middle Lowest Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}middle_third",
-                f"{column_label}lowest_third",
-            ],
-            f"{filter_label}In Defensive Right Lowest Third": [
-                f"{column_label}defensive_third",
-                f"{column_label}right_third",
-                f"{column_label}lowest_third",
-            ],
-            # Ball-relative positioning
-            f"{filter_label}In Front of Ball": [f"{column_label}in_front_of_ball"],
-            f"{filter_label}Behind Ball": [f"{column_label}behind_ball"],
-            # Movement state
-            f"{filter_label}Grounded": [f"{column_label}grounded"],
-            f"{filter_label}Airborne": [f"{column_label}airborne"],
-            # Surfaces
-            f"{filter_label}On Ceiling": [f"{column_label}on_ceiling"],
-            f"{filter_label}On Left Wall": [f"{column_label}on_left_wall"],
-            f"{filter_label}On Right Wall": [f"{column_label}on_right_wall"],
-            f"{filter_label}On Back Wall": [f"{column_label}on_back_wall"],
-            f"{filter_label}On Front Wall": [f"{column_label}on_front_wall"],
-            # Goal zones
-            f"{filter_label}In Own Goal": [f"{column_label}in_own_goal"],
-            f"{filter_label}In Opponents Goal": [f"{column_label}in_opponents_goal"],
-        }
-        for label, cols in positioning_columns.items():
-            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"{filter_label}Percent Time {label}"] = perc
-            features[f"{filter_label}Average Stint {label}"] = avg_stint
+        if config["include_field_positioning"]:
+            field_positioning_features = aggregate_field_positioning(
+                game=game, main_player=main_player
+            )
+            features = features | field_positioning_features
+
+        if config["include_boost_usage"]:
+            boost_usage_features = aggregate_boost_usage(
+                game=game, main_player=main_player
+            )
+            features = features | boost_usage_features
 
         speed_columns = {
-            f"{filter_label}Stationary": [f"{column_label}is_still"],
-            f"{filter_label}Slow": [f"{column_label}is_slow"],
-            f"{filter_label}Semi-Slow": [f"{column_label}is_semi_slow"],
-            f"{filter_label}Medium Speed": [f"{column_label}is_slow"],
-            f"{filter_label}Semi-Fast": [f"{column_label}is_semi_fast"],
-            f"{filter_label}Drive Speed": [f"{column_label}is_drive_speed"],
-            f"{filter_label}Boost Speed": [f"{column_label}is_supersonic"],
-            f"{filter_label}Supersonic": [f"{column_label}is_supersonic"],
+            "Stationary": ["is_still"],
+            "Slow": ["is_slow"],
+            "Semi-Slow": ["is_semi_slow"],
+            "Medium Speed": ["is_slow"],
+            "Semi-Fast": ["is_semi_fast"],
+            "Drive Speed": ["is_drive_speed"],
+            "Boost Speed": ["is_supersonic"],
+            "Supersonic": ["is_supersonic"],
         }
         for label, cols in speed_columns.items():
             perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"{filter_label}Percent Time while {label}"] = perc
-            features[f"{filter_label}Average Stint while {label}"] = avg_stint
+            features["Percent Time while {label}"] = perc
+            features["Average Stint while {label}"] = avg_stint
 
         features = self.get_possession_and_pressure_stats(
             features=features,
@@ -1204,34 +942,26 @@ class Rocket_League_Feature_Extractor:
             filter_label=filter_label,
         )
 
-        rotation_columns = {
-            f"{filter_label}First Man": [f"{column_label}simple_first_man"],
-            f"{filter_label}Second Man": [f"{column_label}simple_second_man"],
-            f"{filter_label}Third Man": [f"{column_label}simple_third_man"],
-        }
-        for label, cols in rotation_columns.items():
-            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features[f"{filter_label}Percent Time while {label}"] = perc
-            features[f"{filter_label}Average Stint while {label}"] = avg_stint
+        if config["include_player_rotations"]:
+            player_rotation_features = aggregate_player_rotations(
+                game=game, main_player=main_player
+            )
+            features = features | player_rotation_features
 
         perc_blue_simple_possession, _ = self.get_position_stats_for(
-            game, [f"{column_label}simple_possession"], "blue"
+            game, ["simple_possession"], "blue"
         )
-        features[f"{filter_label}Percentage Blue With Possession"] = (
-            perc_blue_simple_possession
-        )
+        features["Percentage Blue With Possession"] = perc_blue_simple_possession
         perc_contested_simple_possession, _ = self.get_position_stats_for(
-            game, [f"{column_label}simple_possession"], "contested"
+            game, ["simple_possession"], "contested"
         )
-        features[f"{filter_label}Percentage Contested With Possession"] = (
+        features["Percentage Contested With Possession"] = (
             perc_contested_simple_possession
         )
         perc_orange_simple_possession, _ = self.get_position_stats_for(
-            game, [f"{column_label}simple_possession"], "orange"
+            game, ["simple_possession"], "orange"
         )
-        features[f"{filter_label}Percentage Orange With Possession"] = (
-            perc_orange_simple_possession
-        )
+        features["Percentage Orange With Possession"] = perc_orange_simple_possession
 
         return features
 
@@ -1243,6 +973,7 @@ class Rocket_League_Feature_Extractor:
         teams: Dict[str, List[str]],
         column_label: str = "",
     ):
+        game = game.copy()
         distance_cols = {
             column_label + key: value
             for key, value in self.extract_distances(
@@ -1288,87 +1019,68 @@ class Rocket_League_Feature_Extractor:
             c for c in distance_cols.keys() if c.endswith("_distance_to_ball")
         ]
         dependent_cols: Dict[str, pd.DataFrame | pd.Series] = {}
-        dependent_cols[f"{main_player}_{column_label}closest_to_ball"] = game[
-            f"{main_player}_{column_label}distance_to_ball"
+        dependent_cols[f"{main_player}_closest_to_ball"] = game[
+            f"{main_player}_distance_to_ball"
         ] == game[ball_distance_cols].min(axis=1)
-        dependent_cols[f"{main_player}_{column_label}farthest_from_ball"] = game[
-            f"{main_player}_{column_label}distance_to_ball"
+        dependent_cols[f"{main_player}_farthest_from_ball"] = game[
+            f"{main_player}_distance_to_ball"
         ] == game[ball_distance_cols].max(axis=1)
 
-        # Get all teammates excluding the main player
-        team = next(t for t, players in teams.items() if main_player in players)
-        teammates = [p for p in teams[team] if p != main_player]
-
-        # Collect distance columns for teammates + main player
-        teammate_cols = [f"{column_label}{p}_distance_to_ball" for p in teammates] + [
-            f"{main_player}_{column_label}distance_to_ball"
-        ]
-
-        # Rank distances among teammates (1 = closest, max = farthest)
-        ranks = game[teammate_cols].rank(
-            axis=1, method="min"
-        )  # ascending rank: 1 = closest
-
-        # Extract main player's rank
-        main_rank = ranks[f"{main_player}_{column_label}distance_to_ball"]
-
-        dependent_cols[f"{main_player}_{column_label}simple_first_man"] = main_rank == 1
-        dependent_cols[f"{main_player}_{column_label}simple_third_man"] = (
-            main_rank == len(teammates) + 1
-        )
-        dependent_cols[f"{main_player}_{column_label}simple_second_man"] = ~(
-            dependent_cols[f"{main_player}_{column_label}simple_first_man"]
-            | dependent_cols[f"{main_player}_{column_label}simple_third_man"]
-        )
+        if f"{main_player}_distance_to_ball" in game.columns:
+            # Rank distances among teammates (1 = closest, max = farthest)
+            simple_player_rotation_cols = get_simple_player_rotation_cols(
+                game=game, teams=teams
+            )
+            dependent_cols = dependent_cols | simple_player_rotation_cols
 
         # Wall checks, excluding goal occupancy
-        dependent_cols[f"{main_player}_{column_label}on_back_wall"] = (
-            game[f"{main_player}_{column_label}positioning_y"] <= -(Y_WALL - TOL)
-        ) & (~game[f"{main_player}_{column_label}in_own_goal"])
-        dependent_cols[f"{main_player}_{column_label}on_front_wall"] = (
-            game[f"{main_player}_{column_label}positioning_y"] >= (Y_WALL - TOL)
-        ) & (~game[f"{main_player}_{column_label}in_opponents_goal"])
+        dependent_cols[f"{main_player}_on_back_wall"] = (
+            game[f"{main_player}_positioning_y"] <= -(Y_WALL - TOL)
+        ) & (~game[f"{main_player}_in_own_goal"])
+        dependent_cols[f"{main_player}_on_front_wall"] = (
+            game[f"{main_player}_positioning_y"] >= (Y_WALL - TOL)
+        ) & (~game[f"{main_player}_in_opponents_goal"])
 
-        dependent_cols[f"{main_player}_{column_label}is_still"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] <= 10
+        dependent_cols[f"{main_player}_is_still"] = (
+            game[f"{main_player}_positioning_linear_velocity"] <= 10
         )
-        dependent_cols[f"{main_player}_{column_label}is_slow"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] <= 500
+        dependent_cols[f"{main_player}_is_slow"] = (
+            game[f"{main_player}_positioning_linear_velocity"] <= 500
         )
-        dependent_cols[f"{main_player}_{column_label}is_semi_slow"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] > 500
-        ) & (game[f"{main_player}_{column_label}positioning_linear_velocity"] <= 1000)
-        dependent_cols[f"{main_player}_{column_label}is_medium_speed"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] > 1000
-        ) & (game[f"{main_player}_{column_label}positioning_linear_velocity"] <= 1500)
-        dependent_cols[f"{main_player}_{column_label}is_semi_fast"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] > 1500
-        ) & (game[f"{main_player}_{column_label}positioning_linear_velocity"] <= 2000)
-        dependent_cols[f"{main_player}_{column_label}is_fast"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] > 2000
+        dependent_cols[f"{main_player}_is_semi_slow"] = (
+            game[f"{main_player}_positioning_linear_velocity"] > 500
+        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 1000)
+        dependent_cols[f"{main_player}_is_medium_speed"] = (
+            game[f"{main_player}_positioning_linear_velocity"] > 1000
+        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 1500)
+        dependent_cols[f"{main_player}_is_semi_fast"] = (
+            game[f"{main_player}_positioning_linear_velocity"] > 1500
+        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 2000)
+        dependent_cols[f"{main_player}_is_fast"] = (
+            game[f"{main_player}_positioning_linear_velocity"] > 2000
         )
 
-        dependent_cols[f"{main_player}_{column_label}is_drive_speed"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] <= 1410
+        dependent_cols[f"{main_player}_is_drive_speed"] = (
+            game[f"{main_player}_positioning_linear_velocity"] <= 1410
         )
-        dependent_cols[f"{main_player}_{column_label}is_boost_speed"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] > 1410
-        ) & (game[f"{main_player}_{column_label}positioning_linear_velocity"] < 2200)
-        dependent_cols[f"{main_player}_{column_label}is_supersonic"] = (
-            game[f"{main_player}_{column_label}positioning_linear_velocity"] >= 2200
+        dependent_cols[f"{main_player}_is_boost_speed"] = (
+            game[f"{main_player}_positioning_linear_velocity"] > 1410
+        ) & (game[f"{main_player}_positioning_linear_velocity"] < 2200)
+        dependent_cols[f"{main_player}_is_supersonic"] = (
+            game[f"{main_player}_positioning_linear_velocity"] >= 2200
         )
 
         game = pd.concat(
             [game, pd.DataFrame(dependent_cols, index=game.index)],
             axis=1,
         )
-        game.loc[:, f"{main_player}_{column_label}airborne"] = ~(
-            game[f"{main_player}_{column_label}grounded"]
-            | game[f"{main_player}_{column_label}on_ceiling"]
-            | game[f"{main_player}_{column_label}on_left_wall"]
-            | game[f"{main_player}_{column_label}on_right_wall"]
-            | game[f"{main_player}_{column_label}on_back_wall"]
-            | game[f"{main_player}_{column_label}on_front_wall"]
+        game.loc[:, f"{main_player}_airborne"] = ~(
+            game[f"{main_player}_grounded"]
+            | game[f"{main_player}_on_ceiling"]
+            | game[f"{main_player}_on_left_wall"]
+            | game[f"{main_player}_on_right_wall"]
+            | game[f"{main_player}_on_back_wall"]
+            | game[f"{main_player}_on_front_wall"]
         )
 
         game = self.extract_simple_possession(
@@ -1383,6 +1095,18 @@ class Rocket_League_Feature_Extractor:
             teams=teams,
             column_label=column_label,
         )
+
+        if self.config["include_boost_usage"]:
+            boost_usage_cols = get_boost_usage_cols(game=game, teams=teams)
+            game = pd.concat(
+                [game, pd.DataFrame(boost_usage_cols, index=game.index)], axis=1
+            )
+
+        if self.config["include_player_rotations"]:
+            player_rotation_cols = get_player_rotation_cols(game=game, teams=teams)
+            game = pd.concat(
+                [game, pd.DataFrame(player_rotation_cols, index=game.index)], axis=1
+            )
 
         game.to_csv(os.path.join(FEATURES, "debug.csv"), index=False)
         return game
@@ -1401,7 +1125,7 @@ class Rocket_League_Feature_Extractor:
             "round": round,
         }
 
-        game = self.create_game_features(
+        g = self.create_game_features(
             game=game,
             player_names=player_names,
             teams=teams,
@@ -1409,9 +1133,40 @@ class Rocket_League_Feature_Extractor:
         )
 
         features = self.aggregate_features(
-            game=game,
+            game=g,
             main_player=main_player,
             teams=teams,
+        )
+
+        team = next((t for t, players in teams.items() if main_player in players), None)
+        if not team:
+            raise ValueError("No team found")
+        # TODO: these are not right, but have the right idea
+        features["Scored Goal"] = (
+            game[main_player + "_goal"].sum()
+            if main_player + "_goal" in game.columns
+            else 0
+        )
+        features["Team Scored Goal"] = max(
+            (
+                game[teams[team][0] + "_goal"].sum()
+                if teams[team][0] + "_goal" in game.columns
+                and teams[team][0] != main_player
+                else 0
+            ),
+            (
+                game[teams[team][1] + "_goal"].sum()
+                if teams[team][1] + "_goal" in game.columns
+                and teams[team][1] != main_player
+                else 0
+            ),
+            (
+                game[teams[team][2] + "_goal"].sum()
+                if teams[team][2] + "_goal" in game.columns
+                and teams[team][2] != main_player
+                else 0
+            ),
+            0,
         )
 
         return features

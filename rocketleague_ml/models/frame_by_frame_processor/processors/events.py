@@ -18,6 +18,10 @@ def process_game_start(
     if name == "Active":
         frame.game.activate_game(frame)
         frame.calculate_match_time()
+        for key in frame.processed_fields:
+            if "_kickoff" not in key:
+                continue
+            frame.processed_fields[key] = 0
     elif name == "PostGoalScored":
         frame.game.deactivate_game()
         frame.calculate_match_time()

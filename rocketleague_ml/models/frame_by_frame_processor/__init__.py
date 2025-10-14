@@ -57,7 +57,6 @@ class Frame_By_Frame_Processor:
             include_ball_collisions=include_ball_collisions,
             include_player_collisions=include_player_collisions,
             include_custom_scoreboard_metrics=include_custom_scoreboard_metrics,
-            include_possession=include_possession,
             include_mechanics=include_mechanics,
         )
         return None
@@ -78,7 +77,6 @@ class Frame_By_Frame_Processor:
         include_ball_collisions: bool | None = None,
         include_player_collisions: bool | None = None,
         include_custom_scoreboard_metrics: bool | None = None,
-        include_possession: bool | None = None,
         include_mechanics: bool | None = None,
     ):
         include_simple_vision = (
@@ -112,11 +110,6 @@ class Frame_By_Frame_Processor:
             else self.include_ball_positioning
         )
 
-        include_possession = (
-            include_possession
-            if include_possession is not None
-            else self.include_possession
-        )
         include_custom_scoreboard_metrics = (
             include_custom_scoreboard_metrics
             if include_custom_scoreboard_metrics is not None
@@ -133,8 +126,6 @@ class Frame_By_Frame_Processor:
             else self.include_ball_collisions
         )
 
-        if not self.include_ball_positioning and include_possession:
-            raise ValueError("include_possesion requires include_ball_positioning.")
         if not self.include_ball_positioning and include_ball_collisions:
             raise ValueError(
                 "include_ball_collisions requires include_ball_positioning."
@@ -144,8 +135,6 @@ class Frame_By_Frame_Processor:
                 "include_custom_scoreboard_metrics requires include_ball_positioning."
             )
 
-        if not self.include_car_positioning and include_possession:
-            raise ValueError("include_possesion requires include_car_positioning.")
         if not self.include_car_positioning and include_ball_collisions:
             raise ValueError(
                 "include_ball_collisions requires include_car_positioning."
@@ -158,7 +147,6 @@ class Frame_By_Frame_Processor:
         self.include_ball_collisions = include_ball_collisions
         self.include_player_collisions = include_player_collisions
         self.include_custom_scoreboard_metrics = include_custom_scoreboard_metrics
-        self.include_possession = include_possession
 
         self.include_movement = (
             include_movement if include_movement is not None else self.include_movement
@@ -405,11 +393,8 @@ class Frame_By_Frame_Processor:
                 self.include_ball_collisions
                 or self.include_custom_scoreboard_metrics
                 or self.include_player_collisions
-                or self.include_possession
             )
             if processed_frame.active and include_collision:
-                if f >= 171:
-                    pass
                 collisions = collision_detector.detect_all_collisions(
                     prev_frame=processed_frame.game.previous_frame,
                     curr_frame=processed_frame,

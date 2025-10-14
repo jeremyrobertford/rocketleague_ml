@@ -30,7 +30,6 @@ from rocketleague_ml.models.frame_by_frame_processor.processors.rigid_bodies imp
 from rocketleague_ml.models.frame_by_frame_processor.processors.misc import (
     process_demo,
     process_boost_pickup,
-    process_team_ball_hit,
 )
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.frame import Frame
@@ -62,5 +61,4 @@ processors: Dict[str, Callable[[Frame_By_Frame_Processor, Actor, Frame], None]] 
     "player_component.score": process_player_gained_points,
     "player_component.shots": process_player_shot,
     "player_component.goals": process_player_scored,
-    "team_ball_hit": process_team_ball_hit,
 }
