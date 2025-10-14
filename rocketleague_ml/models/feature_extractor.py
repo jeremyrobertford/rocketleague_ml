@@ -1442,8 +1442,9 @@ class Rocket_League_Feature_Extractor:
         rounds: NDArray[np.int_] = game["round"].unique()  # type: ignore
         for round in rounds:
             round = cast(int, round)
+            round_frames = game[game["round"] == round].copy().reset_index(drop=True)
             round_features = self.extract_round_features(
-                game=game[game["round"] == round].copy(),
+                game=round_frames,
                 main_player=main_player,
                 id=id,
                 round=round,
