@@ -23,8 +23,8 @@ def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, flo
         percent_time, average_percent_stint = get_time_percentage_and_stint_for_cols(
             game, cols, main_player
         )
-        features[f"Percent Time while {label}"] = percent_time
-        features[f"Average Stint while {label}"] = average_percent_stint
+        features[f"Percent Time {label}"] = percent_time
+        features[f"Average Stint {label}"] = average_percent_stint
 
     features[f"Average Boost Amount"] = game[f"{main_player}_boost_amount"].mean() / 100
 
@@ -84,7 +84,7 @@ def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, flo
     features["Simple Boost Efficiency"] = simple_efficiency
 
     # --- Penalties ---
-    not_airborne = ~game[f"{main_player}_is_airborne"]
+    not_airborne = ~game[f"{main_player}_airborne"]
     supersonic_mask = (game[f"{main_player}_is_supersonic"]) & (not_airborne)
     supersonic_penalty = 0.9
     supersonic_efficiency = simple_efficiency * np.prod(
@@ -104,7 +104,7 @@ def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, flo
     features["Drive to Boost Speed Boost Efficiency"] = drive_to_boost_speed_efficiency
 
     # if you have ball distance
-    ball_distance = game[f"{main_player}_ball_distance"]
+    ball_distance = game[f"{main_player}_distance_to_ball"]
     far_mask = ball_distance > 3000
     far_distance_penalty = 0.95
     far_distance_efficiency = simple_efficiency * np.prod(

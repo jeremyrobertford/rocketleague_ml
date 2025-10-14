@@ -28,8 +28,8 @@ def aggregate_player_rotations(
         features[f"Average Stint while {label}"] = average_percent_stint
 
     player_rotation_columns = {
-        "Simple": f"{main_player}_simple_rotation_position",
-        "Full": f"{main_player}_rotation_position",
+        "Simple": f"{main_player}_simple_player_rotation_position",
+        "Full": f"{main_player}_player_rotation_position",
     }
     for label, col in player_rotation_columns.items():
         rotation_col = game[col].astype("Int64")

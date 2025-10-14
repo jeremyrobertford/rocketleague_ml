@@ -11,11 +11,19 @@ from rocketleague_ml.models.feature_extractor.extractors import (
     get_player_rotation_cols,
     get_simple_player_rotation_cols,
     get_boost_usage_cols,
+    get_speed_cols,
+    get_dependent_speed_cols,
+    get_field_positioning_cols,
+    get_touch_type_cols,
+    get_distancing_cols,
+    get_dependent_distancing_cols,
+    get_dependent_field_positioning_cols,
 )
 from rocketleague_ml.models.feature_extractor.aggregators import (
     aggregate_boost_usage,
     aggregate_player_rotations,
     aggregate_field_positioning,
+    aggregate_speed,
 )
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.config import (
@@ -23,14 +31,6 @@ from rocketleague_ml.config import (
     # FEATURE_LABELS,
     FEATURES,
     PROCESSED,
-    FIELD_Y,
-    Z_GROUND,
-    Z_CEILING,
-    X_WALL,
-    Y_WALL,
-    X_GOAL,
-    GOAL_DEPTH,
-    TOL,
     TOTAL_FIELD_DISTANCE,
 )
 
@@ -75,160 +75,6 @@ class Rocket_League_Feature_Extractor:
             teams[team].append(player_name)
         return player_names, teams
 
-    def extract_distances(
-        self,
-        game: pd.DataFrame,
-        player_names: List[str],
-        main_player: str,
-    ):
-        distance_cols: Dict[str, pd.DataFrame | NDArray[Any]] = {}
-        for player_name in player_names:
-            distance_cols[f"{player_name}_distance_to_ball"] = np.sqrt(
-                (game[f"{player_name}_positioning_x"] - game["ball_positioning_x"]) ** 2
-                + (game[f"{player_name}_positioning_y"] - game["ball_positioning_y"])
-                ** 2
-                + (game[f"{player_name}_positioning_z"] - game["ball_positioning_z"])
-                ** 2
-            )
-
-        for player_name in player_names:
-            if main_player == player_name:
-                continue
-            distance_cols[f"{main_player}_distance_to_{player_name}"] = np.sqrt(
-                (
-                    game[f"{main_player}_positioning_x"]
-                    - game[f"{player_name}_positioning_x"]
-                )
-                ** 2
-                + (
-                    game[f"{main_player}_positioning_y"]
-                    - game[f"{player_name}_positioning_y"]
-                )
-                ** 2
-                + (
-                    game[f"{main_player}_positioning_z"]
-                    - game[f"{player_name}_positioning_z"]
-                )
-                ** 2
-            )
-
-        return distance_cols
-
-    def extract_field_positioning(
-        self, game: pd.DataFrame, player_names: List[str], main_player: str
-    ):
-        field_positioning_cols: Dict[str, pd.DataFrame | pd.Series] = {}
-        max_y = abs(FIELD_Y[0])
-        third_of_y = max_y / 3
-        half_of_z = Z_CEILING / 2
-        third_of_z = Z_CEILING / 3
-
-        field_positioning_cols[f"{main_player}_highest_half"] = (
-            game[f"{main_player}_positioning_z"] >= half_of_z
-        )
-        field_positioning_cols[f"{main_player}_lowest_half"] = (
-            game[f"{main_player}_positioning_z"] < half_of_z
-        )
-        field_positioning_cols[f"{main_player}_highest_third"] = (
-            game[f"{main_player}_positioning_z"] >= third_of_z * 2
-        )
-        field_positioning_cols[f"{main_player}_middle_aerial_third"] = (
-            game[f"{main_player}_positioning_z"] > third_of_z
-        ) & (game[f"{main_player}_positioning_z"] < third_of_z * 2)
-        field_positioning_cols[f"{main_player}_lowest_third"] = (
-            game[f"{main_player}_positioning_z"] <= third_of_z
-        )
-
-        field_positioning_cols[f"{main_player}_offensive_half"] = (
-            game[f"{main_player}_positioning_y"] > 0
-        )
-        field_positioning_cols[f"{main_player}_defensive_half"] = (
-            game[f"{main_player}_positioning_y"] <= 0
-        )
-        field_positioning_cols[f"{main_player}_offensive_third"] = (
-            game[f"{main_player}_positioning_y"] >= third_of_y
-        )
-        field_positioning_cols[f"{main_player}_neutral_third"] = (
-            game[f"{main_player}_positioning_y"] < third_of_y
-        ) & (game[f"{main_player}_positioning_y"] > -third_of_y)
-        field_positioning_cols[f"{main_player}_defensive_third"] = (
-            game[f"{main_player}_positioning_y"] <= -third_of_y
-        )
-
-        field_positioning_cols[f"{main_player}_left_half"] = (
-            game[f"{main_player}_positioning_x"] > 0
-        )
-        field_positioning_cols[f"{main_player}_right_half"] = (
-            game[f"{main_player}_positioning_x"] <= 0
-        )
-        field_positioning_cols[f"{main_player}_left_third"] = (
-            game[f"{main_player}_positioning_x"] >= third_of_y
-        )
-        field_positioning_cols[f"{main_player}_middle_third"] = (
-            game[f"{main_player}_positioning_x"] < third_of_y
-        ) & (game[f"{main_player}_positioning_x"] > -third_of_y)
-        field_positioning_cols[f"{main_player}_right_third"] = (
-            game[f"{main_player}_positioning_x"] <= -third_of_y
-        )
-
-        field_positioning_cols[f"{main_player}_grounded"] = game[f"{main_player}_positioning_z"].between(0, Z_GROUND)  # type: ignore
-        field_positioning_cols[f"{main_player}_on_ceiling"] = (
-            game[f"{main_player}_positioning_z"] >= Z_CEILING
-        )
-
-        field_positioning_cols[f"{main_player}_on_left_wall"] = (
-            game[f"{main_player}_positioning_x"] <= -X_WALL + TOL
-        )
-        field_positioning_cols[f"{main_player}_on_right_wall"] = (
-            game[f"{main_player}_positioning_x"] >= X_WALL - TOL
-        )
-
-        # Ball
-        field_positioning_cols[f"{main_player}_in_front_of_ball"] = (
-            game[f"{main_player}_positioning_y"] > game["ball_positioning_y"]
-        )
-        field_positioning_cols[f"{main_player}_behind_ball"] = (
-            game[f"{main_player}_positioning_y"] < game["ball_positioning_y"]
-        )
-
-        # Goal regions
-        field_positioning_cols[f"{main_player}_in_own_goal"] = (
-            (game[f"{main_player}_positioning_x"].between(-X_GOAL, X_GOAL))  # type: ignore
-            & (game[f"{main_player}_positioning_y"] <= -(Y_WALL - TOL))
-            & (game[f"{main_player}_positioning_y"] >= -(Y_WALL + GOAL_DEPTH + TOL))
-        )
-        field_positioning_cols[f"{main_player}_in_opponents_goal"] = (
-            (game[f"{main_player}_positioning_x"].between(-X_GOAL, X_GOAL))  # type: ignore
-            & (game[f"{main_player}_positioning_y"] >= (Y_WALL - TOL))
-            & (game[f"{main_player}_positioning_y"] <= (Y_WALL + GOAL_DEPTH + TOL))
-        )
-
-        return field_positioning_cols
-
-    def extract_speeds(
-        self,
-        game: pd.DataFrame,
-        player_names: List[str],
-        main_player: str | None = None,
-    ) -> Dict[str, pd.DataFrame | pd.Series | NDArray[np.float64]]:
-        speed_cols: Dict[str, pd.DataFrame | pd.Series | NDArray[Any]] = {}
-        for player_name in player_names:
-            if main_player and player_name != main_player:
-                continue
-            speed_cols[f"{player_name}_positioning_linear_velocity"] = np.sqrt(
-                (game[f"{player_name}_positioning_linear_velocity_x"]) ** 2
-                + (game[f"{player_name}_positioning_linear_velocity_y"]) ** 2
-                + (game[f"{player_name}_positioning_linear_velocity_z"]) ** 2
-            )
-
-            speed_cols[f"{player_name}_positioning_angular_velocity"] = np.sqrt(
-                (game[f"{player_name}_positioning_angular_velocity_x"]) ** 2
-                + (game[f"{player_name}_positioning_angular_velocity_y"]) ** 2
-                + (game[f"{player_name}_positioning_angular_velocity_z"]) ** 2
-            )
-
-        return speed_cols
-
     def get_position_stats_for(
         self, game: pd.DataFrame, cols: Union[str, List[str]], main_player: str
     ):
@@ -263,9 +109,6 @@ class Rocket_League_Feature_Extractor:
         features: Dict[str, float],
         game: pd.DataFrame,
         main_player: str,
-        teams: Dict[str, List[str]],
-        column_label: str = "",
-        filter_label: str = "",
     ):
         """
         Computes statistics when main_player is first man relative to the ball:
@@ -279,13 +122,13 @@ class Rocket_League_Feature_Extractor:
         """
 
         # --- Masks for main_player ---
-        first_man_mask = game[f"{main_player}_simple_first_man"].astype(bool)
+        first_man_mask = game[f"{main_player}_player_rotation_first_man"].astype(bool)
         player_poss = game[f"{main_player}_in_possession"].astype(bool)
         player_contested = game[f"{main_player}_in_contested_possession"].astype(bool)
         player_take_or_contest = player_poss | player_contested
         player_rotate_mask = ~first_man_mask & (
-            (game[f"{main_player}_simple_second_man"])
-            | (game[f"{main_player}_simple_third_man"])
+            (game[f"{main_player}_player_rotation_second_man"])
+            | (game[f"{main_player}_player_rotation_third_man"])
         )
 
         # --- Opponent team ---
@@ -506,161 +349,9 @@ class Rocket_League_Feature_Extractor:
             features=features,
             game=game,
             main_player=main_player,
-            teams=teams,
-            column_label=column_label,
-            filter_label=filter_label,
         )
 
         return features
-
-    def extract_touch_locations(
-        self,
-        game: pd.DataFrame,
-        player_names: List[str],
-        teams: Dict[str, List[str]],
-    ) -> Dict[str, pd.Series]:
-        toward_goal_tol = 0.7
-        toward_teammate_tol = 0.6
-        toward_opponent_tol = 0.6
-        toward_open_space_tol: float | None = None
-        touch_location_col: Dict[str, pd.Series] = {}
-
-        # Define goal directions (Rocket League convention)
-        GOAL_BLUE = np.array([0, -5120, 0])
-        GOAL_ORANGE = np.array([0, 5120, 0])
-
-        # Precompute player positions
-        positions = {
-            p: game[
-                [
-                    f"{p}_positioning_x",
-                    f"{p}_positioning_y",
-                    f"{p}_positioning_z",
-                ]
-            ].to_numpy()
-            for p in player_names
-        }
-
-        # Ball position
-        ball_pos = game[
-            [
-                "ball_positioning_x",
-                "ball_positioning_y",
-                "ball_positioning_z",
-            ]
-        ].to_numpy()
-
-        for player in player_names:
-            prefix = f"{player}_hit_ball_"
-
-            try:
-                impulses = game[
-                    [prefix + "impulse_x", prefix + "impulse_y", prefix + "impulse_z"]
-                ].to_numpy()
-                confidence = game[prefix + "collision_confidence"].fillna(0).to_numpy()  # type: ignore
-            except KeyError:
-                return {}
-
-            hit_dir = np.nan_to_num(
-                impulses / (np.linalg.norm(impulses, axis=1, keepdims=True) + 1e-6)
-            )
-
-            # Determine which team player belongs to
-            team = next((t for t, players in teams.items() if player in players), None)
-            if not team:
-                raise ValueError(f"No team found for player {player} in {teams}")
-
-            # Compute directional vectors
-            goal_target = GOAL_ORANGE if team.lower() == "blue" else GOAL_BLUE
-            goal_vec = goal_target - ball_pos
-            goal_vec /= np.linalg.norm(goal_vec, axis=1, keepdims=True) + 1e-6
-            to_goal = np.sum(hit_dir * goal_vec, axis=1)
-
-            # Teammate direction
-            teammate_positions = [positions[p] for p in teams[team] if p != player]
-            if teammate_positions:
-                team_center = np.mean(np.stack(teammate_positions), axis=0)
-                team_vec = team_center - ball_pos
-                team_vec /= np.linalg.norm(team_vec, axis=1, keepdims=True) + 1e-6
-                to_teammate = np.sum(hit_dir * team_vec, axis=1)
-            else:
-                to_teammate = np.zeros(len(game))
-
-            # Opponent direction
-            opponent_team = [t for t in teams.keys() if t.lower() != team.lower()][0]
-            opponent_positions = [
-                positions[p] for p in teams[opponent_team] if p != player
-            ]
-            if opponent_positions:
-                opp_center = np.mean(np.stack(opponent_positions), axis=0)
-                opp_vec = opp_center - ball_pos
-                opp_vec /= np.linalg.norm(opp_vec, axis=1, keepdims=True) + 1e-6
-                to_opponent = np.sum(hit_dir * opp_vec, axis=1)
-            else:
-                to_opponent = np.zeros(len(game))
-
-            # Open space heuristic
-            open_space_score = (
-                1
-                - np.maximum.reduce(
-                    [np.abs(to_goal), np.abs(to_teammate), np.abs(to_opponent)]
-                )
-                if toward_open_space_tol is None
-                else toward_open_space_tol
-            )
-
-            # Detect multiple collisions (50/50s)
-            collision_count = np.sum(
-                [
-                    ~game[f"{p}_hit_ball_collision_confidence"].isna().to_numpy()
-                    for p in player_names
-                ],
-                axis=0,
-            )
-            fifty_fifty_mask = collision_count > 1
-
-            # Create independent boolean masks for each touch type
-            categories: Dict[str, Any] = {
-                "fifty_fifty": fifty_fifty_mask,
-                "towards_goal": (to_goal > toward_goal_tol),
-                "towards_teammate": (to_teammate > toward_teammate_tol),
-                "towards_opponent": (to_opponent > toward_opponent_tol),
-                "towards_open_space": (
-                    (open_space_score > 0.5)
-                    & ~(to_goal > toward_goal_tol)
-                    & ~(to_teammate > toward_teammate_tol)
-                    & ~(to_opponent > toward_opponent_tol)
-                    & ~fifty_fifty_mask
-                ),
-            }
-
-            # Total touch detection
-            touch_mask = confidence > 0
-            touch_location_col[f"{player}_touch_total"] = pd.Series(
-                touch_mask.astype(int), index=game.index
-            )
-
-            # Add direction dot products for analysis
-            touch_location_col[f"{player}_touch_to_goal_dot"] = pd.Series(
-                to_goal, index=game.index
-            )
-            touch_location_col[f"{player}_touch_to_teammate_dot"] = pd.Series(
-                to_teammate, index=game.index
-            )
-            touch_location_col[f"{player}_touch_to_opponent_dot"] = pd.Series(
-                to_opponent, index=game.index
-            )
-            touch_location_col[f"{player}_touch_open_space_score"] = pd.Series(
-                open_space_score, index=game.index
-            )
-
-            # Add independent category flags
-            for cat, mask in categories.items():
-                touch_location_col[f"{player}_touch_{cat}"] = pd.Series(
-                    (mask & touch_mask).astype(int), index=game.index
-                )
-
-        return touch_location_col
 
     def refine_possession_from_simple(
         self,
@@ -835,6 +526,124 @@ class Rocket_League_Feature_Extractor:
 
         return game
 
+    def create_game_features(
+        self,
+        player_names: List[str],
+        game: pd.DataFrame,
+        teams: Dict[str, List[str]],
+        column_label: str = "",
+    ):
+        game = game.copy()
+
+        initial_feature_cols: Dict[
+            str, pd.Series | NDArray[np.float64] | NDArray[np.int_]
+        ] = {}
+
+        if self.config["include_distancing"]:
+            distancing_cols = get_distancing_cols(game=game, teams=teams)
+            initial_feature_cols = initial_feature_cols | distancing_cols
+
+        if self.config["include_field_positioning"]:
+            field_positioning_cols = get_field_positioning_cols(game=game, teams=teams)
+            initial_feature_cols = initial_feature_cols | field_positioning_cols
+
+        if self.config["include_touch_types"]:
+            touch_types_cols = get_touch_type_cols(game=game, teams=teams)
+            initial_feature_cols = initial_feature_cols | touch_types_cols
+
+        if len(initial_feature_cols):
+            game = pd.concat(
+                [
+                    game,
+                    pd.DataFrame(
+                        initial_feature_cols,
+                        index=game.index,
+                    ),
+                ],
+                axis=1,
+            )
+
+        first_pass_dependent_feature_cols: Dict[
+            str, pd.Series | NDArray[np.float64] | NDArray[np.int_]
+        ] = {}
+
+        if self.config["include_distancing"]:
+            dependent_distancing_cols = get_dependent_distancing_cols(
+                game=game, teams=teams
+            )
+            first_pass_dependent_feature_cols |= dependent_distancing_cols
+
+        if self.config["include_field_positioning"]:
+            dependent_field_positioning_cols = get_dependent_field_positioning_cols(
+                game=game, teams=teams
+            )
+            first_pass_dependent_feature_cols |= dependent_field_positioning_cols
+
+        if self.config["include_player_rotations"]:
+            simple_player_rotation_cols = get_simple_player_rotation_cols(
+                game=game, teams=teams
+            )
+            first_pass_dependent_feature_cols |= simple_player_rotation_cols
+
+        if self.config["include_speed"]:
+            speed_cols = get_speed_cols(game=game, teams=teams)
+            first_pass_dependent_feature_cols |= speed_cols
+
+        if len(first_pass_dependent_feature_cols):
+            game = pd.concat(
+                [
+                    game,
+                    pd.DataFrame(
+                        first_pass_dependent_feature_cols,
+                        index=game.index,
+                    ),
+                ],
+                axis=1,
+            )
+
+        second_pass_dependent_feature_cols: Dict[
+            str, pd.Series | NDArray[np.float64] | NDArray[np.int_]
+        ] = {}
+        if self.config["include_speed"]:
+            dependent_speed_cols = get_dependent_speed_cols(game=game, teams=teams)
+            second_pass_dependent_feature_cols |= dependent_speed_cols
+
+        game = self.extract_simple_possession(
+            game=game.copy(),
+            player_names=player_names,
+            teams=teams,
+        )
+
+        game = self.refine_possession_from_simple(
+            game=game.copy(),
+            player_names=player_names,
+            teams=teams,
+            column_label=column_label,
+        )
+
+        if self.config["include_boost_usage"]:
+            boost_usage_cols = get_boost_usage_cols(game=game, teams=teams)
+            second_pass_dependent_feature_cols |= boost_usage_cols
+
+        if self.config["include_player_rotations"]:
+            player_rotation_cols = get_player_rotation_cols(game=game, teams=teams)
+            second_pass_dependent_feature_cols |= player_rotation_cols
+
+        if len(second_pass_dependent_feature_cols):
+            game = pd.concat(
+                [
+                    game,
+                    pd.DataFrame(
+                        second_pass_dependent_feature_cols,
+                        index=game.index,
+                    ),
+                ],
+                axis=1,
+            )
+
+        game.to_csv(os.path.join(FEATURES, "debug.csv"), index=False)
+        return game
+
     def aggregate_features(
         self,
         game: pd.DataFrame,
@@ -843,7 +652,8 @@ class Rocket_League_Feature_Extractor:
         column_label: str = "",
         filter_label: str = "",
         config: Config | None = None,
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, float]:
+        game = game.copy()
         config = config or self.config
         main_player_team = next(
             (t for t, players in teams.items() if main_player in players), None
@@ -851,7 +661,9 @@ class Rocket_League_Feature_Extractor:
         if not main_player_team:
             raise ValueError("No team found")
         opponent_team = "Orange" if main_player_team == "Blue" else "Blue"
-        features: Dict[str, Any] = {}
+
+        features: Dict[str, float] = {}
+
         total_touches = game[f"{main_player}_touch_total"].sum()
         features["Fifty-Fifty Touch Percentage"] = (
             game[f"{main_player}_touch_fifty_fifty"].sum() / total_touches
@@ -912,26 +724,15 @@ class Rocket_League_Feature_Extractor:
             )
             features = features | field_positioning_features
 
+        if config["include_speed"]:
+            speed_features = aggregate_speed(game=game, main_player=main_player)
+            features = features | speed_features
+
         if config["include_boost_usage"]:
             boost_usage_features = aggregate_boost_usage(
                 game=game, main_player=main_player
             )
             features = features | boost_usage_features
-
-        speed_columns = {
-            "Stationary": ["is_still"],
-            "Slow": ["is_slow"],
-            "Semi-Slow": ["is_semi_slow"],
-            "Medium Speed": ["is_slow"],
-            "Semi-Fast": ["is_semi_fast"],
-            "Drive Speed": ["is_drive_speed"],
-            "Boost Speed": ["is_supersonic"],
-            "Supersonic": ["is_supersonic"],
-        }
-        for label, cols in speed_columns.items():
-            perc, avg_stint = self.get_position_stats_for(game, cols, main_player)
-            features["Percent Time while {label}"] = perc
-            features["Average Stint while {label}"] = avg_stint
 
         features = self.get_possession_and_pressure_stats(
             features=features,
@@ -965,152 +766,6 @@ class Rocket_League_Feature_Extractor:
 
         return features
 
-    def create_game_features(
-        self,
-        main_player: str,
-        player_names: List[str],
-        game: pd.DataFrame,
-        teams: Dict[str, List[str]],
-        column_label: str = "",
-    ):
-        game = game.copy()
-        distance_cols = {
-            column_label + key: value
-            for key, value in self.extract_distances(
-                game=game, player_names=player_names, main_player=main_player
-            ).items()
-        }
-        field_positioning_cols = {
-            column_label + key: value
-            for key, value in self.extract_field_positioning(
-                game=game, player_names=player_names, main_player=main_player
-            ).items()
-        }
-        speed_cols = {
-            column_label + key: value
-            for key, value in self.extract_speeds(
-                game=game, player_names=player_names, main_player=main_player
-            ).items()
-        }
-        touch_location_cols = {
-            column_label + key: value
-            for key, value in self.extract_touch_locations(
-                game=game,
-                player_names=player_names,
-                teams=teams,
-            ).items()
-        }
-
-        game = pd.concat(
-            [
-                game,
-                pd.DataFrame(
-                    distance_cols
-                    | field_positioning_cols
-                    | speed_cols
-                    | touch_location_cols,
-                    index=game.index,
-                ),
-            ],
-            axis=1,
-        )
-
-        ball_distance_cols = [
-            c for c in distance_cols.keys() if c.endswith("_distance_to_ball")
-        ]
-        dependent_cols: Dict[str, pd.DataFrame | pd.Series] = {}
-        dependent_cols[f"{main_player}_closest_to_ball"] = game[
-            f"{main_player}_distance_to_ball"
-        ] == game[ball_distance_cols].min(axis=1)
-        dependent_cols[f"{main_player}_farthest_from_ball"] = game[
-            f"{main_player}_distance_to_ball"
-        ] == game[ball_distance_cols].max(axis=1)
-
-        if f"{main_player}_distance_to_ball" in game.columns:
-            # Rank distances among teammates (1 = closest, max = farthest)
-            simple_player_rotation_cols = get_simple_player_rotation_cols(
-                game=game, teams=teams
-            )
-            dependent_cols = dependent_cols | simple_player_rotation_cols
-
-        # Wall checks, excluding goal occupancy
-        dependent_cols[f"{main_player}_on_back_wall"] = (
-            game[f"{main_player}_positioning_y"] <= -(Y_WALL - TOL)
-        ) & (~game[f"{main_player}_in_own_goal"])
-        dependent_cols[f"{main_player}_on_front_wall"] = (
-            game[f"{main_player}_positioning_y"] >= (Y_WALL - TOL)
-        ) & (~game[f"{main_player}_in_opponents_goal"])
-
-        dependent_cols[f"{main_player}_is_still"] = (
-            game[f"{main_player}_positioning_linear_velocity"] <= 10
-        )
-        dependent_cols[f"{main_player}_is_slow"] = (
-            game[f"{main_player}_positioning_linear_velocity"] <= 500
-        )
-        dependent_cols[f"{main_player}_is_semi_slow"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 500
-        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 1000)
-        dependent_cols[f"{main_player}_is_medium_speed"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 1000
-        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 1500)
-        dependent_cols[f"{main_player}_is_semi_fast"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 1500
-        ) & (game[f"{main_player}_positioning_linear_velocity"] <= 2000)
-        dependent_cols[f"{main_player}_is_fast"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 2000
-        )
-
-        dependent_cols[f"{main_player}_is_drive_speed"] = (
-            game[f"{main_player}_positioning_linear_velocity"] <= 1410
-        )
-        dependent_cols[f"{main_player}_is_boost_speed"] = (
-            game[f"{main_player}_positioning_linear_velocity"] > 1410
-        ) & (game[f"{main_player}_positioning_linear_velocity"] < 2200)
-        dependent_cols[f"{main_player}_is_supersonic"] = (
-            game[f"{main_player}_positioning_linear_velocity"] >= 2200
-        )
-
-        game = pd.concat(
-            [game, pd.DataFrame(dependent_cols, index=game.index)],
-            axis=1,
-        )
-        game.loc[:, f"{main_player}_airborne"] = ~(
-            game[f"{main_player}_grounded"]
-            | game[f"{main_player}_on_ceiling"]
-            | game[f"{main_player}_on_left_wall"]
-            | game[f"{main_player}_on_right_wall"]
-            | game[f"{main_player}_on_back_wall"]
-            | game[f"{main_player}_on_front_wall"]
-        )
-
-        game = self.extract_simple_possession(
-            game=game.copy(),
-            player_names=player_names,
-            teams=teams,
-        )
-
-        game = self.refine_possession_from_simple(
-            game=game.copy(),
-            player_names=player_names,
-            teams=teams,
-            column_label=column_label,
-        )
-
-        if self.config["include_boost_usage"]:
-            boost_usage_cols = get_boost_usage_cols(game=game, teams=teams)
-            game = pd.concat(
-                [game, pd.DataFrame(boost_usage_cols, index=game.index)], axis=1
-            )
-
-        if self.config["include_player_rotations"]:
-            player_rotation_cols = get_player_rotation_cols(game=game, teams=teams)
-            game = pd.concat(
-                [game, pd.DataFrame(player_rotation_cols, index=game.index)], axis=1
-            )
-
-        game.to_csv(os.path.join(FEATURES, "debug.csv"), index=False)
-        return game
-
     def extract_round_features(
         self,
         game: pd.DataFrame,
@@ -1125,15 +780,14 @@ class Rocket_League_Feature_Extractor:
             "round": round,
         }
 
-        g = self.create_game_features(
+        game = self.create_game_features(
             game=game,
             player_names=player_names,
             teams=teams,
-            main_player=main_player,
         )
 
         features = self.aggregate_features(
-            game=g,
+            game=game,
             main_player=main_player,
             teams=teams,
         )
