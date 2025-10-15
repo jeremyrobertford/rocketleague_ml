@@ -121,7 +121,7 @@ class Game_Data_Wrangler:
                     wrangled_games.append(game)
             else:
                 self.logger.print(
-                    f"Parsing {file_name} -> {WRANGLED} ...", end=" ", flush=True
+                    f"Wrangling {file_name} -> {WRANGLED} ...", end=" ", flush=True
                 )
                 try:
                     game_data = self.preprocessor.load_preprocessed_file(file_name)

@@ -6,6 +6,9 @@ import os
 import pandas as pd
 from rocketleague_ml.config import PROCESSED
 from rocketleague_ml.models.pipeline import Rocket_League_Pipeline
+from rocketleague_ml.models.principle_component_analyzer import (
+    Principle_Component_Analyzer,
+)
 
 
 def main():
@@ -38,13 +41,20 @@ def main():
             pd.DataFrame(result[0]).to_csv(debug_file_path, index=False)
 
     # process()
-    processed_game = pipeline.processor.load_processed_file("debug.csv")
-    pipeline.extractor.extract_features(
-        main_player="RL_LionHeart",
-        games=[processed_game],
-        save_output=True,
-        overwrite=True,
-    )
+    def extract_features():  # pyright: ignore[reportUnusedFunction]
+        processed_game = pipeline.processor.load_processed_file(
+            "2EF689F5462A8F2B981329B15D08402A.csv"
+        )
+        pipeline.extractor.extract_features(
+            main_player="RL_LionHeart",
+            games=[processed_game],
+            save_output=False,
+            overwrite=True,
+        )
+
+    # extract_features()
+    features = pipeline.extractor.load_features()
+    Principle_Component_Analyzer().analyze(features)
 
 
 if __name__ == "__main__":

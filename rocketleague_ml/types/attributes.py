@@ -273,6 +273,7 @@ class Network_Frames(TypedDict):
 class Raw_Game_Properties(TypedDict):
     Id: str
     TeamSize: int
+    TotalSecondsPlayed: float
 
 
 class Raw_Game_Data(TypedDict):

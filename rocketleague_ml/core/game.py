@@ -116,7 +116,12 @@ class Game:
                     self.disconnected_cars[new_actor.actor_id] = new_actor
                     return None
                 player_actor_id = player_cars[new_actor.actor_id]
-                player = players[player_actor_id]
+                player = players.get(player_actor_id) or self.players.get(
+                    player_actor_id
+                )
+                if not player:
+                    delayed_new_actors[new_actor.actor_id] = new_actor
+                    return None
                 car = Car(new_actor, player)
                 player.assign_car(car)
                 self.players[player.actor_id] = player

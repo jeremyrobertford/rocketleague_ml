@@ -41,11 +41,16 @@ def process_activate_boost(
         frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
         return None
     boost_car_component = Boost_Car_Component(car_component)
-    car_component.car.boost.update_activity(updated_actor)
+    car_component.update_activity(updated_actor)
     if processor.include_boost_management:
-        frame.processed_fields[car_component.car.player.name + "_boost_active"] = (
-            1 if boost_car_component.active else 0
-        )
+        if not car_component.secondary_category:
+            raise ValueError(f"Failed to update car component {updated_actor.raw}")
+        frame.processed_fields[
+            car_component.car.player.name
+            + "_"
+            + car_component.secondary_category
+            + "_active"
+        ] = (1 if boost_car_component.active else 0)
     return None
 
 

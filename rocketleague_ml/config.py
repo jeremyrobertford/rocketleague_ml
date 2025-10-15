@@ -7,7 +7,10 @@ LOG = True
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "..", "data")
-RAW_REPLAYS = os.path.join(DATA_DIR, "raw")
+RAW_REPLAYS = (
+    "C:/Users/jerem/OneDrive/Documents/My Games/Rocket League/TAGame/DemosEpic"
+)
+# RAW_REPLAYS = os.path.join(DATA_DIR, "raw")
 PREPROCESSED = os.path.join(DATA_DIR, "preprocessed")
 WRANGLED = os.path.join(DATA_DIR, "wrangled")
 PROCESSED = os.path.join(DATA_DIR, "processed")

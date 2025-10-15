@@ -71,6 +71,9 @@ def process_boost_pickup(
     if boost_pickup["instigator"] is None or boost_pickup["instigator"] == -1:
         # print(f"Null boost pickup {updated_actor.raw}")
         return None
+    if boost_pickup["instigator"] in frame.game.disconnected_cars:
+        frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
+        return None
     car = frame.game.cars[boost_pickup["instigator"]]
     if processor.include_boost_management:
         field_label = f"{car.player.name}_boost_pickup"

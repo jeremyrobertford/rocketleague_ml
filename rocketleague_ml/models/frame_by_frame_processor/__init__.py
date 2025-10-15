@@ -3,7 +3,7 @@ import math
 import pandas as pd
 from pathlib import Path
 from typing import Any, Dict, List, TypedDict
-from rocketleague_ml.config import PREPROCESSED, PROCESSED, WRANGLED
+from rocketleague_ml.config import PREPROCESSED, PROCESSED, WRANGLED, ROUND_LENGTH
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.rigid_body import Rigid_Body
 from rocketleague_ml.core.game import Game
@@ -33,11 +33,10 @@ class Frame_By_Frame_Processor:
         include_player_demos: bool = True,
         include_scoreboard_metrics: bool = True,
         include_boost_management: bool = True,
+        include_ball_collisions: bool = True,
         # requires rl_utilities
-        include_ball_collisions: bool = False,
         include_player_collisions: bool = False,
         include_custom_scoreboard_metrics: bool = False,
-        include_possession: bool = False,
         include_mechanics: bool = False,
     ):
         self.include_advanced_vision: bool = include_advanced_vision
@@ -338,6 +337,8 @@ class Frame_By_Frame_Processor:
             Actor.label(a, game.objects) for a in frame.updated_actors
         ]
 
+        if f >= 10327:
+            pass
         if frame.resync:
             frame.game.set_actors(frame)
 
@@ -374,7 +375,7 @@ class Frame_By_Frame_Processor:
 
         return frame
 
-    def process_game(self, game_data: Raw_Game_Data):
+    def process_game(self, game_data: Raw_Game_Data) -> List[Dict[str, Any]]:
         game = Game(game_data)
         collision_detector = RocketLeagueCollisionDetector()
 
@@ -384,7 +385,17 @@ class Frame_By_Frame_Processor:
 
         frames: List[Dict[str, Any]] = []
         for f, raw_frame in enumerate(game.frames):
-            processed_frame = self.process_frame(raw_frame, game, f)
+            try:
+                processed_frame = self.process_frame(raw_frame, game, f)
+            except Exception:
+                if len(frames) == 0:
+                    return []
+                previous_frame = frames[-1]
+                previous_round = previous_frame["round"] - 1
+                if previous_round <= 0:
+                    return []
+                frames = [f for f in frames if f["round"] <= previous_round]
+                return frames
             if f == 0:
                 processors["rigid_body"](self, game.ball, processed_frame)
                 for car in game.cars.values():
@@ -584,13 +595,20 @@ class Frame_By_Frame_Processor:
                 )
                 try:
                     game_data = self.preprocessor.load_preprocessed_file(file_name)
-                    game_frames = self.process_game(game_data)
-                    if not save_output:
-                        all_game_frames.append(game_frames)
+                    game_total_time_played = game_data["properties"][
+                        "TotalSecondsPlayed"
+                    ]
+                    if game_total_time_played > ROUND_LENGTH * 1.75:
+                        self.logger.print("SKIPPED.")
+                        self.skipped += 1
                     else:
-                        self.save_processed_file(file_name, game_frames)
-                    self.logger.print("OK.")
-                    self.succeeded += 1
+                        game_frames = self.process_game(game_data)
+                        if not save_output:
+                            all_game_frames.append(game_frames)
+                        else:
+                            self.save_processed_file(file_name, game_frames)
+                        self.logger.print("OK.")
+                        self.succeeded += 1
                 except Exception as e:
                     self.logger.print("FAILED.")
                     self.logger.print(f"  {type(e).__name__}: {e}")

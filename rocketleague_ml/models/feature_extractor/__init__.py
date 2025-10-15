@@ -6,6 +6,7 @@ from typing import cast, Any, Dict, List, Union, TypedDict
 import pandas as pd
 import numpy as np
 from numpy.typing import NDArray
+from rocketleague_ml.config import ROUND_LENGTH
 from rocketleague_ml.models.frame_by_frame_processor import Frame_By_Frame_Processor
 from rocketleague_ml.models.feature_extractor.extractors import (
     get_player_rotation_cols,
@@ -78,7 +79,7 @@ class Rocket_League_Feature_Extractor:
     def get_position_stats_for(
         self, game: pd.DataFrame, cols: Union[str, List[str]], main_player: str
     ):
-        total_time = game["delta"].sum()
+        total_time = ROUND_LENGTH
 
         # build mask
         if isinstance(cols, str):
@@ -268,8 +269,8 @@ class Rocket_League_Feature_Extractor:
         perc_poss, perc_stint_poss = compute_stats(player_poss)
         perc_contested, perc_stint_contested = compute_stats(player_contested)
 
-        features["With Possession"] = perc_poss
-        features["With Contested Possession"] = perc_contested
+        features["Percentage With Possession"] = perc_poss
+        features["Percentage With Contested Possession"] = perc_contested
         features["Average Stint With Possession"] = perc_stint_poss
         features["Average Stint With Contested Possession"] = perc_stint_contested
 
@@ -340,8 +341,8 @@ class Rocket_League_Feature_Extractor:
 
         perc_defense, _ = compute_stats(opponent_poss & defensive_mask)
         perc_defense_contested, _ = compute_stats(opponent_contested & defensive_mask)
-        features["{main_player}_perc_defensive_pressure"] = perc_defense
-        features["{main_player}_perc_defensive_contested_pressure"] = (
+        features["Percentage Under Defensive Pressure"] = perc_defense
+        features["Percentage Under Contested Defensive Pressure"] = (
             perc_defense_contested
         )
 
@@ -667,18 +668,28 @@ class Rocket_League_Feature_Extractor:
         total_touches = game[f"{main_player}_touch_total"].sum()
         features["Fifty-Fifty Touch Percentage"] = (
             game[f"{main_player}_touch_fifty_fifty"].sum() / total_touches
+            if total_touches > 0
+            else 0
         )
         features["Towards Goal Touch Percentage"] = (
             game[f"{main_player}_touch_towards_goal"].sum() / total_touches
+            if total_touches > 0
+            else 0
         )
         features["Towards Teammate Touch Percentage"] = (
             game[f"{main_player}_touch_towards_teammate"].sum() / total_touches
+            if total_touches > 0
+            else 0
         )
         features["Towards Opponent Touch Percentage"] = (
             game[f"{main_player}_touch_towards_opponent"].sum() / total_touches
+            if total_touches > 0
+            else 0
         )
         features["Towards Open Space Touch Percentage"] = (
             game[f"{main_player}_touch_towards_open_space"].sum() / total_touches
+            if total_touches > 0
+            else 0
         )
 
         movement_columns: Dict[str, List[str]] = {
@@ -956,9 +967,9 @@ class Rocket_League_Feature_Extractor:
         Path(FEATURES).mkdir(parents=True, exist_ok=True)
         features_path = os.path.join(FEATURES, "features.csv")
         labels_path = os.path.join(FEATURES, "feature_labels.json")
-        if overwrite and os.path.exists(features_path):
+        if save_output and overwrite and os.path.exists(features_path):
             os.remove(features_path)
-        if overwrite and os.path.exists(labels_path):
+        if save_output and overwrite and os.path.exists(labels_path):
             os.remove(labels_path)
 
         if (
@@ -982,7 +993,6 @@ class Rocket_League_Feature_Extractor:
                                 game_features,
                                 features_path,
                                 labels_path,
-                                transposed=True,
                             )
                         else:
                             features += game_features

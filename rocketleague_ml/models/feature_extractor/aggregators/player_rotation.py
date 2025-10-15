@@ -57,7 +57,8 @@ def aggregate_player_rotations(
         else:
             avg_rotation_speed = np.nan
 
-        features[f"{label} Rotation Speed"] = avg_rotation_speed
+        total_time = game["delta"].sum()
+        features[f"{label} Rotation Speed"] = avg_rotation_speed / total_time
 
         # Compute directional rotation counts
         from_to_counts = {(i, j): 0 for i in (1, 2, 3) for j in (1, 2, 3) if i != j}

@@ -9,13 +9,21 @@ from rocketleague_ml.models.feature_extractor.aggregators.helpers import (
 def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, float]:
     features: Dict[str, float] = {}
 
+    boost_amount_col = f"{main_player}_boost_amount"
+    boost_pickup_col = f"{main_player}_boost_pickup_amount"
+    boost_y_col = f"{main_player}_boost_pickup_y"
+
+    if boost_pickup_col not in game.columns:
+        game[boost_pickup_col] = np.nan
+
+    # --- Boost usage percentages ---
     boost_usage_columns = {
         "While Boosting": ["boost_active"],
         "With No Boost": ["no_boost"],
-        "With <=25 Boost": ["1st_quad_boost"],
+        "With >0 and <=25 Boost": ["1st_quad_boost"],
         "With >25 and <= 50 Boost": ["2nd_quad_boost"],
-        "With >50 and <= 75 BoostBoosting": ["3rd_quad_boost"],
-        "With >75 and <= 100 Boost": ["4th_quad_boost"],
+        "With >50 and <= 75 Boost": ["3rd_quad_boost"],
+        "With >75 and < 100 Boost": ["4th_quad_boost"],
         "With Full Boost": ["full_boost"],
     }
 
@@ -26,36 +34,41 @@ def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, flo
         features[f"Percent Time {label}"] = percent_time
         features[f"Average Stint {label}"] = average_percent_stint
 
-    features[f"Average Boost Amount"] = game[f"{main_player}_boost_amount"].mean() / 100
-
-    # --- Pickup masks ---
-    boost_amount_col = f"{main_player}_boost_amount"
-    boost_pickup_col = f"{main_player}_boost_pickup_amount"
-    boost_y_col = f"{main_player}_boost_pickup_y"
-
-    # pick-ups that actually gave usable boost (not overfill)
-    usable_pickup = game[boost_pickup_col].copy()
-    usable_pickup[game[boost_amount_col] == 100] = 0  # ignore overfill
-
-    # big vs small
-    big_mask = usable_pickup >= 100
-    small_mask = (usable_pickup > 0) & (usable_pickup < 100)
-
-    features["Average Boost Grabbed"] = usable_pickup[usable_pickup > 0].mean() / 100
-    features["Average Big Boost Grabbed"] = usable_pickup[big_mask].mean() / 100
-    features["Average Small Boost Grabbed"] = usable_pickup[small_mask].mean() / 100
-
-    # overfill
-    overfill_mask = (game[boost_amount_col] == 100) & (game[boost_pickup_col] > 0)
-    features["Average Overfill"] = (
-        game.loc[overfill_mask, boost_pickup_col].mean() / 100
-    )
+    avg_boost_amount = game[boost_amount_col].mean()
+    features[f"Average Boost Amount"] = avg_boost_amount / 100
 
     # --- Ensure team column is filled ---
     team_col = f"{main_player}_team"
-    if game[team_col].isna().any():
-        game[team_col] = game[team_col].ffill().bfill()  # fill missing team values
-    player_team = game[team_col].iloc[0]
+    player_team = game[team_col].iloc[-1]
+
+    # --- Overfill-aware usable pickup ---
+    boost_amount = game[boost_amount_col].to_numpy()
+    boost_pickup = game[boost_pickup_col].to_numpy()
+    prev_boost = np.roll(boost_amount, 1)
+    prev_boost[0] = boost_amount[0]
+    missing_boost = 100 - prev_boost
+    usable_pickup = np.minimum(boost_pickup, missing_boost)
+
+    # Big vs small pickups
+    big_mask = boost_pickup == 100
+    small_mask = boost_pickup == 12
+
+    big_boost_grabbed = boost_pickup[big_mask]
+    small_boost_grabbed = boost_pickup[small_mask]
+    features["Average Boost Grabbed"] = (
+        boost_pickup.mean() / 100 if len(boost_pickup) else 0
+    )
+    features["Percentage Big Boost Grabbed"] = len(big_boost_grabbed) / len(
+        boost_pickup[boost_pickup > 0]
+    )
+    features["Percentage Small Boost Grabbed"] = len(small_boost_grabbed) / len(
+        boost_pickup[boost_pickup > 0]
+    )
+
+    # Overfill
+    overfill_mask = (boost_amount == 100) & (boost_pickup > 0)
+    overfill = boost_pickup[overfill_mask]
+    features["Average Overfill"] = overfill.mean() / 100 if len(overfill) else 0
 
     # --- Simple stolen: pickups in opponent half ---
     if player_team == "Blue":
@@ -63,29 +76,45 @@ def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, flo
     else:
         opponent_half_mask = game[boost_y_col] < 0
 
-    simple_stolen = usable_pickup[opponent_half_mask]
-    features["Average Boost Simple Stolen"] = simple_stolen.mean() / 100
-    features["Average Big Boost Simple Stolen"] = (
-        simple_stolen[simple_stolen >= 100].mean() / 100
+    simple_stolen = boost_pickup[opponent_half_mask]
+    simple_big_stolen = simple_stolen[simple_stolen == 100]
+    simple_small_stolen = simple_stolen[simple_stolen == 12]
+    features["Average Boost Simple Stolen"] = (
+        simple_stolen.mean() / 100 if len(simple_stolen) else 0
     )
-    features["Average Small Boost Simple Stolen"] = (
-        simple_stolen[(simple_stolen > 0) & (simple_stolen < 100)].mean() / 100
+    features["Percentage Big Boost Simple Stolen"] = len(simple_big_stolen) / len(
+        simple_stolen[simple_stolen > 0]
     )
+    features["Percentage Small Boost Simple Stolen"] = len(simple_small_stolen) / len(
+        simple_stolen[simple_stolen > 0]
+    )
+    simple_stolen_overfill = boost_pickup[overfill_mask & opponent_half_mask]
     features["Average Boost Simple Stolen Overfill"] = (
-        game.loc[overfill_mask & opponent_half_mask, boost_pickup_col].mean() / 100
+        simple_stolen_overfill.mean() / 100 if len(simple_stolen_overfill) else 0
     )
 
-    # --- Simple efficiency (ignore overfill) ---
-    boost_used: pd.Series[float] = game[boost_amount_col].diff().clip(lower=0)  # type: ignore
+    # --- Simple Boost Efficiency (overfill-aware) ---
+    boost_diff = np.diff(boost_amount, prepend=boost_amount[0])
+    boost_used = -boost_diff
     total_used = boost_used.sum()
     total_gained = usable_pickup.sum()
 
-    simple_efficiency = total_gained / (total_used + 1e-6)  # avoid div by zero
+    if total_gained == 0:
+        features["Simple Boost Efficiency"] = np.nan
+        features["Supersonic Speed Boost Efficiency"] = np.nan
+        features["Drive to Boost Speed Boost Efficiency"] = np.nan
+        features["Far From Ball Boost Efficiency"] = np.nan
+        features["Boost Efficiency"] = np.nan
+        return features
+
+    simple_efficiency = total_used / total_gained
+    if simple_efficiency < 0 or simple_efficiency > 1:
+        pass
     features["Simple Boost Efficiency"] = simple_efficiency
 
     # --- Penalties ---
     not_airborne = ~game[f"{main_player}_airborne"]
-    supersonic_mask = (game[f"{main_player}_is_supersonic"]) & (not_airborne)
+    supersonic_mask = (game[f"{main_player}_is_supersonic"]) & not_airborne
     supersonic_penalty = 0.9
     supersonic_efficiency = simple_efficiency * np.prod(
         np.where(supersonic_mask, supersonic_penalty, 1)
@@ -93,7 +122,7 @@ def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, flo
     features["Supersonic Speed Boost Efficiency"] = supersonic_efficiency
 
     drive_to_boost_mask = (
-        game[f"{main_player}_is_drive_speed"].shift(1)
+        game[f"{main_player}_is_drive_speed"].shift(1, fill_value=False)
         & game[f"{main_player}_is_boost_speed"]
         & not_airborne
     ) & (boost_used > 20)
@@ -103,7 +132,6 @@ def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, flo
     )
     features["Drive to Boost Speed Boost Efficiency"] = drive_to_boost_speed_efficiency
 
-    # if you have ball distance
     ball_distance = game[f"{main_player}_distance_to_ball"]
     far_mask = ball_distance > 3000
     far_distance_penalty = 0.95
@@ -112,6 +140,7 @@ def aggregate_boost_usage(game: pd.DataFrame, main_player: str) -> Dict[str, flo
     )
     features["Far From Ball Boost Efficiency"] = far_distance_efficiency
 
+    # Combined Boost Efficiency
     features["Boost Efficiency"] = (
         simple_efficiency
         * np.prod(np.where(supersonic_mask, supersonic_penalty, 1))

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 
 def get_touch_type_cols(game: pd.DataFrame, teams: Dict[str, List[str]]):
@@ -24,22 +24,30 @@ def get_touch_type_cols(game: pd.DataFrame, teams: Dict[str, List[str]]):
         ]
     ].to_numpy()
     # Precompute player positions
-    positions = {
-        p: game[
+    positions: Dict[str, np.ndarray[Tuple[int, int], np.dtype[np.float64]]] = {}
+    for p in teams["Blue"] + teams["Orange"]:
+        prefix = f"{p}_hit_ball_"
+        cols = [
+            prefix + "impulse_x",
+            prefix + "impulse_y",
+            prefix + "impulse_z",
+            prefix + "collision_confidence",
+        ]
+        for col in cols:
+            if col not in game:
+                game[col] = 0
+        positions[p] = game[
             [
                 f"{p}_positioning_x",
                 f"{p}_positioning_y",
                 f"{p}_positioning_z",
             ]
         ].to_numpy()
-        for p in teams["Blue"] + teams["Orange"]
-    }
 
     for team, players in teams.items():
 
         for p in players:
             prefix = f"{p}_hit_ball_"
-
             impulses = game[
                 [prefix + "impulse_x", prefix + "impulse_y", prefix + "impulse_z"]
             ].to_numpy()

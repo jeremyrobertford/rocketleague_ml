@@ -18,7 +18,7 @@ def get_boost_usage_cols(game: pd.DataFrame, teams: Dict[str, List[str]]):
                 boost_amount <= 75
             )
             boost_usage_cols[f"{p}_4th_quad_boost"] = (boost_amount > 75) & (
-                boost_amount <= 100
+                boost_amount < 100
             )
             boost_usage_cols[f"{p}_full_boost"] = boost_amount == 100
 
