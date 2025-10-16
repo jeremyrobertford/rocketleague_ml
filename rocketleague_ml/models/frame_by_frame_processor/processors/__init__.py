@@ -7,6 +7,7 @@ from rocketleague_ml.models.frame_by_frame_processor.processors.car_components i
     process_activate_boost,
     process_steer,
     process_car_component,
+    process_jump,
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors.camera_settings import (
     process_camera_settings,
@@ -41,8 +42,9 @@ processors: Dict[str, Callable[[Frame_By_Frame_Processor, Actor, Frame], None]] 
     "camera_settings.camera_settings": process_camera_settings,
     "camera_settings.yaw": process_camera_settings_swivel,
     "camera_settings.pitch": process_camera_settings_swivel,
-    "camera_settings.car_cam": process_camera_settings_activate,
+    "camera_settings.ball_cam": process_camera_settings_activate,
     "camera_settings.rear_cam": process_camera_settings_activate,
+    "car_component.jump": process_jump,
     "car_component.dodge": process_dodge,
     "car_component.double_jump": process_double_jump,
     "car_component.boost": process_boost,

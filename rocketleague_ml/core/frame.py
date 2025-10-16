@@ -1,4 +1,5 @@
 from __future__ import annotations
+from math import ceil
 from typing import TYPE_CHECKING, cast, Any, Dict, List
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.types.attributes import Raw_Frame
@@ -49,6 +50,9 @@ class Frame:
             "goal",
             "team_ball_hit",
             "hit_ball",
+            "_jump_",
+            "_byte",
+            "_dodge",
         ]
         for key, value in self.game.previous_frame.processed_fields.items():
             ignore = False
@@ -77,7 +81,8 @@ class Frame:
             self.game.overtime_elapsed = new_overtime_elapsed
 
         if not self.in_overtime:
-            mins, secs = divmod(int(self.match_time_remaining), 60)
+            display_time = ceil(self.match_time_remaining)
+            mins, secs = divmod(display_time, 60)
             self.match_time_label = f"{mins}:{secs:02d}"
         else:
             mins, secs = divmod(int(self.overtime_elapsed), 60)

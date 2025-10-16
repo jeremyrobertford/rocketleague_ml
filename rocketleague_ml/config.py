@@ -79,7 +79,7 @@ CAMERA_SETTINGS_LABELS = {
     "TAGame.Default__CameraSettingsActor_TA": "settings",
     "TAGame.CameraSettingsActor_TA:CameraYaw": "yaw",
     "TAGame.CameraSettingsActor_TA:CameraPitch": "pitch",
-    "TAGame.CameraSettingsActor_TA:bUsingSecondaryCamera": "car_cam",
+    "TAGame.CameraSettingsActor_TA:bUsingSecondaryCamera": "ball_cam",
     "TAGame.CameraSettingsActor_TA:bUsingBehindView": "rear_cam",
     "TAGame.CameraSettingsActor_TA:ProfileSettings": "camera_settings",
 }

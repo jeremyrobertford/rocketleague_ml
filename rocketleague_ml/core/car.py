@@ -6,6 +6,7 @@ from rocketleague_ml.core.car_component import (
     Simple_Car_Component,
     Car_Component,
     Boost_Car_Component,
+    Dodge_Car_Component,
 )
 
 if TYPE_CHECKING:
@@ -17,7 +18,7 @@ class Car(Rigid_Body):
         super().__init__(car, player.name)
         self._boost: Boost_Car_Component | None = None
         self._jump: Car_Component | None = None
-        self._dodge: Car_Component | None = None
+        self._dodge: Dodge_Car_Component | None = None
         self._flip: Car_Component | None = None
         self._double_jump: Car_Component | None = None
         self.steer: Simple_Car_Component | None = None
@@ -37,14 +38,14 @@ class Car(Rigid_Body):
         self._boost = new_boost
 
     @property
-    def dodge(self) -> Car_Component:
+    def dodge(self) -> Dodge_Car_Component:
         cc = self._dodge
         if cc is None:
             raise ValueError("Car dodge not assigned")
         return cc
 
     @dodge.setter
-    def dodge(self, new_dodge: Car_Component):
+    def dodge(self, new_dodge: Dodge_Car_Component):
         self._dodge = new_dodge
 
     @property

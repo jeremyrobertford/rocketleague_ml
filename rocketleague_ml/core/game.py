@@ -8,7 +8,12 @@ from rocketleague_ml.types.attributes import (
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.rigid_body import Rigid_Body
 from rocketleague_ml.core.ball import Ball
-from rocketleague_ml.core.car import Car, Boost_Car_Component, Car_Component
+from rocketleague_ml.core.car import (
+    Car,
+    Boost_Car_Component,
+    Car_Component,
+    Dodge_Car_Component,
+)
 from rocketleague_ml.core.camera_settings import Camera_Settings
 from rocketleague_ml.core.player import Player
 
@@ -32,7 +37,7 @@ class Game:
         self.rounds: Dict[int, Any] = {}
         self.players: Dict[int, Player] = {}
         self.boost_pads: Dict[int, Rigid_Body] = {}
-        self.match_time_remaining: float = ROUND_LENGTH + 3
+        self.match_time_remaining: float = ROUND_LENGTH
         self.in_overtime: bool = False
         self.overtime_elapsed: float = 0.0
         self.processed_frames: List[Frame] = []
@@ -69,8 +74,18 @@ class Game:
         match car_component.secondary_category:
             case "boost":
                 car_component = Boost_Car_Component(car_component)
+                if car_component.actor_id in self.car_components:
+                    prev_boost = self.car_components[car_component.actor_id]
+                    if isinstance(prev_boost, Boost_Car_Component):
+                        car_component.amount = prev_boost.amount
+                        car_component.active = prev_boost.active
                 car.boost = car_component
             case "dodge":
+                car_component = Dodge_Car_Component(car_component)
+                if car_component.actor_id in self.car_components:
+                    prev_dodge = self.car_components[car_component.actor_id]
+                    if isinstance(prev_dodge, Dodge_Car_Component):
+                        car_component.last_dodge = prev_dodge.last_dodge
                 car.dodge = car_component
             case "double_jump":
                 car.double_jump = car_component
@@ -109,6 +124,9 @@ class Game:
         camera_settings: Dict[int, Actor],
         unhandled_new_actors: Dict[int, Actor],
         delayed_new_actors: Dict[int, Actor],
+        previous_car_components: Dict[
+            int, Car_Component | Boost_Car_Component | Dodge_Car_Component
+        ],
     ):
         match new_actor.category:
             case "car":
@@ -142,8 +160,18 @@ class Game:
                 match new_actor.secondary_category:
                     case "boost":
                         car_component = Boost_Car_Component(car_component)
+                        if car_component.actor_id in previous_car_components:
+                            prev_boost = previous_car_components[car_component.actor_id]
+                            if isinstance(prev_boost, Boost_Car_Component):
+                                car_component.amount = prev_boost.amount
+                                car_component.active = prev_boost.active
                         car.boost = car_component
                     case "dodge":
+                        car_component = Dodge_Car_Component(car_component)
+                        if car_component.actor_id in previous_car_components:
+                            prev_dodge = previous_car_components[car_component.actor_id]
+                            if isinstance(prev_dodge, Dodge_Car_Component):
+                                car_component.last_dodge = prev_dodge.last_dodge
                         car.dodge = car_component
                     case "double_jump":
                         car.double_jump = car_component
@@ -177,7 +205,12 @@ class Game:
         self._ball: Ball | None = None
         self.camera_settings: Dict[int, Camera_Settings] = {}
         self.cars: Dict[int, Car] = {}
-        self.car_components: Dict[int, Car_Component | Boost_Car_Component] = {}
+        prev_car_components = (
+            self.car_components if hasattr(self, "car_components") else {}
+        )
+        self.car_components: Dict[
+            int, Car_Component | Boost_Car_Component | Dodge_Car_Component
+        ] = {}
         self.disconnected_cars: Dict[int, Actor] = {}
         self.disconnected_car_components: Dict[int, Actor] = {}
         self.disconnected_car_component_updates: Dict[int, List[Actor]] = {}
@@ -250,6 +283,7 @@ class Game:
                 camera_settings,
                 unhandled_new_actors,
                 delayed_new_actors,
+                prev_car_components,
             )
 
         for new_actor in delayed_new_actors.values():
@@ -263,6 +297,7 @@ class Game:
                 camera_settings,
                 unhandled_new_actors,
                 delayed_new_actors,
+                prev_car_components,
             )
 
         return None
@@ -276,11 +311,6 @@ class Game:
     def deactivate_game(self):
         self.active = False
         self.active_clock = False
-
-        # Unsure why this is necessary, but it makes the match time
-        # line up better
-        self.match_time_remaining += 3
-
         return None
 
     def update_player_car(self, player: Player, new_car: Car):

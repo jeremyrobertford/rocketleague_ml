@@ -1,5 +1,6 @@
+from __future__ import annotations
 from typing import Tuple
-from math import sqrt, atan2, acos
+from math import sqrt, atan2, acos, isclose
 from rocketleague_ml.utils.helpers import convert_euler_to_quat
 from rocketleague_ml.types.attributes import (
     Position_Dict,
@@ -15,6 +16,7 @@ class Base_Position:
         self.x = position["x"] or 0
         self.y = position["y"] or 0
         self.z = position["z"] or 0
+        self._tolerance = 0.05
 
     def copy(self):
         return Base_Position(self.to_dict())
@@ -32,6 +34,25 @@ class Base_Position:
             "y": self.y,
             "z": self.z,
         }
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Base_Position):
+            return False
+        return (
+            isclose(self.x, other.x, abs_tol=self._tolerance)
+            and isclose(self.y, other.y, abs_tol=self._tolerance)
+            and isclose(self.z, other.z, abs_tol=self._tolerance)
+        )
+
+    def __hash__(self) -> int:
+        # Quantize coordinates to multiples of tolerance before hashing
+        qx = round(self.x / self._tolerance)
+        qy = round(self.y / self._tolerance)
+        qz = round(self.z / self._tolerance)
+        return hash((qx, qy, qz))
+
+    def __repr__(self):
+        return f"Base_Position(x={self.x}, y={self.y}, z={self.z})"
 
 
 class Rotation:

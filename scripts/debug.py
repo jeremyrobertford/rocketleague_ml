@@ -33,14 +33,15 @@ def main():
             include_mechanics=False,
         )
         result = pipeline.processor.process_games(
-            game_datas=[replay], save_output=False, overwrite=False
+            game_datas=[replay], save_output=False, overwrite=True
         )
 
         if result:
             debug_file_path = os.path.join(PROCESSED, "debug.csv")
             pd.DataFrame(result[0]).to_csv(debug_file_path, index=False)
 
-    # process()
+    process()
+
     def extract_features():  # pyright: ignore[reportUnusedFunction]
         processed_game = pipeline.processor.load_processed_file(
             "2EF689F5462A8F2B981329B15D08402A.csv"

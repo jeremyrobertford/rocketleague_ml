@@ -106,3 +106,6 @@ class Actor:
 
     def owns(self, possible_child: Actor):
         return self.actor_id == possible_child.active_actor_id
+
+    def __repr__(self):
+        return str(self.raw)

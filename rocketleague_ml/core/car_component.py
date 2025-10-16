@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 from rocketleague_ml.utils.helpers import convert_byte_to_float
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.rigid_body import Rigid_Body
+from rocketleague_ml.core.positioning import Position
 
 if TYPE_CHECKING:
     from rocketleague_ml.core.car import Car
@@ -157,3 +158,21 @@ class Boost_Car_Component(Car_Component):
         self.pickups = replicated_boost["grant_count"]
         self.amount = replicated_boost["boost_amount"]
         return None
+
+
+class Dodge_Car_Component(Car_Component):
+    def __init__(self, car_component: Car_Component):
+        super().__init__(car_component, car_component.car)
+        self.last_dodge: Position | None = None
+        return None
+
+    def dodge(self, dodge_actor: Actor) -> bool:
+        if not dodge_actor.attribute or "Location" not in dodge_actor.attribute:
+            raise ValueError(
+                f"Cannot perform dodge without dodge actor {dodge_actor.raw}"
+            )
+        dodge_direction = Position(dodge_actor.attribute["Location"])
+        if dodge_direction == self.last_dodge:
+            return False
+        self.last_dodge = dodge_direction
+        return True

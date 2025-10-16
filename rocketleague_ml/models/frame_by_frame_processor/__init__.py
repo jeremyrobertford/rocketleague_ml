@@ -337,8 +337,6 @@ class Frame_By_Frame_Processor:
             Actor.label(a, game.objects) for a in frame.updated_actors
         ]
 
-        if f >= 10327:
-            pass
         if frame.resync:
             frame.game.set_actors(frame)
 
@@ -361,8 +359,6 @@ class Frame_By_Frame_Processor:
         delayed_updated_actors: List[Actor] = []
         for ua in frame.updated_actors:
             updated_actor = Actor(ua, frame.game.objects)
-            if updated_actor.secondary_category == "team":
-                pass
             self.process_updated_actor(updated_actor, frame)
 
         for updated_actor in delayed_updated_actors:
