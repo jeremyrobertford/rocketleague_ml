@@ -10,10 +10,14 @@ from .player_rotation import (
 from .speed import (
     aggregate_speed,
 )
+from .mechanics import (
+    aggregate_mechanics,
+)
 
 __all__ = [
     "aggregate_boost_usage",
     "aggregate_player_rotations",
     "aggregate_field_positioning",
     "aggregate_speed",
+    "aggregate_mechanics",
 ]

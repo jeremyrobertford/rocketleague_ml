@@ -25,6 +25,7 @@ from rocketleague_ml.models.feature_extractor.aggregators import (
     aggregate_player_rotations,
     aggregate_field_positioning,
     aggregate_speed,
+    aggregate_mechanics,
 )
 from rocketleague_ml.utils.logging import Logger
 from rocketleague_ml.config import (
@@ -45,6 +46,7 @@ class Config(TypedDict):
     include_pressure: bool
     include_player_rotations: bool
     include_boost_usage: bool
+    include_mechanics: bool
 
 
 class Rocket_League_Feature_Extractor:
@@ -60,6 +62,7 @@ class Rocket_League_Feature_Extractor:
             "include_pressure": True,
             "include_player_rotations": True,
             "include_boost_usage": True,
+            "include_mechanics": True,
         }
 
     def get_player_names_and_teams(self, game: pd.DataFrame):
@@ -728,6 +731,10 @@ class Rocket_League_Feature_Extractor:
         features["Average Distance to Opponents"] = (
             avg_distance_to_opponents / TOTAL_FIELD_DISTANCE
         )
+
+        if config["include_mechanics"]:
+            mechanics_features = aggregate_mechanics(game=game, main_player=main_player)
+            features = features | mechanics_features
 
         if config["include_field_positioning"]:
             field_positioning_features = aggregate_field_positioning(

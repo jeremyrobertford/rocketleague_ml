@@ -93,7 +93,7 @@ def process_dodge(
         raise ValueError(f"Car component cannot dodge {updated_actor.raw}")
     new_dodge_occurred = car_component.dodge(updated_actor)
     if new_dodge_occurred and car_component.last_dodge and processor.include_movement:
-        field_label = car_component.car.player.name + "_dodge"
+        field_label = car_component.car.player.name + "_dodge_torque"
         frame.processed_fields[field_label + "_x"] = car_component.last_dodge.x
         frame.processed_fields[field_label + "_y"] = car_component.last_dodge.y
         frame.processed_fields[field_label + "_z"] = car_component.last_dodge.z

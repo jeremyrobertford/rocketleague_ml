@@ -171,8 +171,8 @@ class Dodge_Car_Component(Car_Component):
             raise ValueError(
                 f"Cannot perform dodge without dodge actor {dodge_actor.raw}"
             )
-        dodge_direction = Position(dodge_actor.attribute["Location"])
-        if dodge_direction == self.last_dodge:
+        dodge_torque = Position(dodge_actor.attribute["Location"])
+        if dodge_torque == self.last_dodge:
             return False
-        self.last_dodge = dodge_direction
+        self.last_dodge = dodge_torque
         return True
