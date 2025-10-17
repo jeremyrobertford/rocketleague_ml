@@ -40,10 +40,11 @@ def process_demo(
         frame.processed_fields[field_label + "_z"] = demolition["attacker_velocity"][
             "z"
         ]
-        field_label = f"{victim_car.player.name}_demod"
+        field_label = f"{victim_car.player.name}_demoed"
         frame.processed_fields[field_label + "_x"] = demolition["victim_velocity"]["x"]
         frame.processed_fields[field_label + "_y"] = demolition["victim_velocity"]["y"]
         frame.processed_fields[field_label + "_z"] = demolition["victim_velocity"]["z"]
+        frame.game.stop_tracking_position_for(victim_car)
     return None
 
 

@@ -6,7 +6,7 @@ from rocketleague_ml.core.car_component import (
     Simple_Car_Component,
     Car_Component,
     Boost_Car_Component,
-    Dodge_Car_Component,
+    Flip_Car_Component,
 )
 
 if TYPE_CHECKING:
@@ -18,13 +18,16 @@ class Car(Rigid_Body):
         super().__init__(car, player.name)
         self._boost: Boost_Car_Component | None = None
         self._jump: Car_Component | None = None
-        self._dodge: Dodge_Car_Component | None = None
+        self._dodge: Flip_Car_Component | None = None
         self._flip: Car_Component | None = None
-        self._double_jump: Car_Component | None = None
+        self._double_jump: Flip_Car_Component | None = None
         self.steer: Simple_Car_Component | None = None
         self.throttle: Simple_Car_Component | None = None
         self.handbrake: Simple_Car_Component | None = None
         self.player: Player = player
+
+    def __repr__(self):
+        return f"Car(player={self.player.name}, x={self.positioning.location.x}, y={self.positioning.location.y}, z={self.positioning.location.z}, lvx={self.positioning.linear_velocity.x}, lvy={self.positioning.linear_velocity.y}, lvz={self.positioning.linear_velocity.z})"
 
     @property
     def boost(self) -> Boost_Car_Component:
@@ -38,14 +41,14 @@ class Car(Rigid_Body):
         self._boost = new_boost
 
     @property
-    def dodge(self) -> Dodge_Car_Component:
+    def dodge(self) -> Flip_Car_Component:
         cc = self._dodge
         if cc is None:
             raise ValueError("Car dodge not assigned")
         return cc
 
     @dodge.setter
-    def dodge(self, new_dodge: Dodge_Car_Component):
+    def dodge(self, new_dodge: Flip_Car_Component):
         self._dodge = new_dodge
 
     @property
@@ -60,14 +63,14 @@ class Car(Rigid_Body):
         self._jump = new_jump
 
     @property
-    def double_jump(self) -> Car_Component:
+    def double_jump(self) -> Flip_Car_Component:
         cc = self._double_jump
         if cc is None:
             raise ValueError("Car double jump not assigned")
         return cc
 
     @double_jump.setter
-    def double_jump(self, new_double_jump: Car_Component):
+    def double_jump(self, new_double_jump: Flip_Car_Component):
         self._double_jump = new_double_jump
 
     @property

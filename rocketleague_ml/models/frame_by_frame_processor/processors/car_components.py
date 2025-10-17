@@ -4,12 +4,35 @@ from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.frame import Frame
 from rocketleague_ml.core.car_component import (
     Simple_Car_Component,
-    Boost_Car_Component,
-    Dodge_Car_Component,
+    Flip_Car_Component,
 )
 
 if TYPE_CHECKING:
     from rocketleague_ml.models.frame_by_frame_processor import Frame_By_Frame_Processor
+
+
+def process_component_usage_in_air(
+    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
+):
+    car_component = frame.game.car_components.get(updated_actor.actor_id)
+    if not car_component:
+        frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
+        return None
+    attribute = updated_actor.attribute
+    if attribute is None or "Int" not in attribute:
+        raise ValueError(
+            f"Component usage in air must have Int attribute {updated_actor.raw}"
+        )
+    usage_number = attribute.get("Int")
+    field_label = car_component.car.player.name + "_component_usage_in_air"
+    if car_component.secondary_category == "boost":
+        if processor.include_boost_management:
+            frame.processed_fields[field_label + "_boost"] = usage_number
+    elif processor.include_movement:
+        frame.processed_fields[field_label + "_" + car_component.secondary_category] = (
+            usage_number
+        )
+    return None
 
 
 def process_jump(
@@ -24,11 +47,8 @@ def process_jump(
         raise ValueError(f"Jump must have Int attribute {updated_actor.raw}")
     if processor.include_movement:
         jump_number = attribute.get("Int")
-        field_label = car_component.car.player.name + "_jump_" + str(jump_number)
-        frame.processed_fields[field_label] = 1
-        frame.processed_fields[
-            field_label + "_" + (car_component.secondary_category or "")
-        ] = 1
+        field_label = car_component.car.player.name + "_jump"
+        frame.processed_fields[field_label] = jump_number
     return None
 
 
@@ -54,24 +74,39 @@ def process_double_jump(
     return None
 
 
-def process_activate_boost(
+def process_activate_component(
     processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
 ):
     car_component = frame.game.car_components.get(updated_actor.actor_id)
     if not car_component:
         frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
         return None
-    boost_car_component = Boost_Car_Component(car_component)
     car_component.update_activity(updated_actor)
-    if processor.include_boost_management:
-        if not car_component.secondary_category:
-            raise ValueError(f"Failed to update car component {updated_actor.raw}")
-        frame.processed_fields[
-            car_component.car.player.name
-            + "_"
-            + car_component.secondary_category
-            + "_active"
-        ] = (1 if boost_car_component.active else 0)
+    if not car_component.secondary_category:
+        raise ValueError(f"Failed to update car component {updated_actor.raw}")
+    if (
+        processor.include_boost_management
+        and car_component.secondary_category == "boost"
+    ):
+        if updated_actor.attribute and updated_actor.attribute.get("Byte"):
+            frame.processed_fields[
+                car_component.car.player.name
+                + "_"
+                + car_component.secondary_category
+                + "_byte"
+            ] = updated_actor.attribute.get("Byte")
+    if processor.include_movement and car_component.secondary_category != "boost":
+        if not updated_actor.attribute or "Byte" not in updated_actor.attribute:
+            raise ValueError(
+                f"Byte not given for car component activity {updated_actor}"
+            )
+        new_bytes = updated_actor.attribute["Byte"]
+        if (
+            frame.resync
+            and car_component.previous_activity - 25 <= new_bytes
+            and new_bytes <= car_component.previous_activity
+        ):
+            return None
         if updated_actor.attribute and updated_actor.attribute.get("Byte"):
             frame.processed_fields[
                 car_component.car.player.name
@@ -89,14 +124,14 @@ def process_dodge(
     if not car_component:
         frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
         return None
-    if not isinstance(car_component, Dodge_Car_Component):
+    if not isinstance(car_component, Flip_Car_Component):
         raise ValueError(f"Car component cannot dodge {updated_actor.raw}")
     new_dodge_occurred = car_component.dodge(updated_actor)
-    if new_dodge_occurred and car_component.last_dodge and processor.include_movement:
+    if new_dodge_occurred and car_component.last_flip and processor.include_movement:
         field_label = car_component.car.player.name + "_dodge_torque"
-        frame.processed_fields[field_label + "_x"] = car_component.last_dodge.x
-        frame.processed_fields[field_label + "_y"] = car_component.last_dodge.y
-        frame.processed_fields[field_label + "_z"] = car_component.last_dodge.z
+        frame.processed_fields[field_label + "_x"] = car_component.last_flip.x
+        frame.processed_fields[field_label + "_y"] = car_component.last_flip.y
+        frame.processed_fields[field_label + "_z"] = car_component.last_flip.z
     return None
 
 

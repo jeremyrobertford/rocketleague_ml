@@ -15,18 +15,19 @@ def main():
     pipeline = Rocket_League_Pipeline()
 
     def process():  # pyright: ignore[reportUnusedFunction]
-        debug_id = "2EF689F5462A8F2B981329B15D08402A"
+        # debug_id = "2EF689F5462A8F2B981329B15D08402A"
+        debug_id = "848245D7461E5618628D6398ADDF2E98"
         replay = pipeline.wrangler.load_wrangled_file(debug_id + ".json")
         pipeline.processor.config(
-            include_ball_positioning=True,
-            include_car_positioning=True,
-            include_simple_vision=True,
-            include_advanced_vision=True,
+            include_ball_positioning=False,
+            include_car_positioning=False,
+            include_simple_vision=False,
+            include_advanced_vision=False,
             include_movement=True,
-            include_player_demos=True,
-            include_boost_management=True,
-            include_scoreboard_metrics=True,
-            include_ball_collisions=True,
+            include_player_demos=False,
+            include_boost_management=False,
+            include_scoreboard_metrics=False,
+            include_ball_collisions=False,
             # not developed yet
             include_player_collisions=False,
             include_custom_scoreboard_metrics=False,
@@ -38,7 +39,10 @@ def main():
 
         if result:
             debug_file_path = os.path.join(PROCESSED, "debug.csv")
-            pd.DataFrame(result[0]).to_csv(debug_file_path, index=False)
+            r = pd.DataFrame(result[0])
+            r_cols = [c for c in r.columns if "RL_Lion" in c or "time" in c]
+            r = r[r_cols]
+            r.to_csv(debug_file_path, index=False)
 
     process()
 

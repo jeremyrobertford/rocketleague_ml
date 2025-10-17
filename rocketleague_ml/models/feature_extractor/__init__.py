@@ -19,6 +19,7 @@ from rocketleague_ml.models.feature_extractor.extractors import (
     get_distancing_cols,
     get_dependent_distancing_cols,
     get_dependent_field_positioning_cols,
+    assign_jumps,
 )
 from rocketleague_ml.models.feature_extractor.aggregators import (
     aggregate_boost_usage,
@@ -624,6 +625,8 @@ class Rocket_League_Feature_Extractor:
             teams=teams,
             column_label=column_label,
         )
+
+        game = assign_jumps(game=game, teams=teams)
 
         if self.config["include_boost_usage"]:
             boost_usage_cols = get_boost_usage_cols(game=game, teams=teams)

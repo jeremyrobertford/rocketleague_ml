@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Dict, cast
 from rocketleague_ml.config import (
     LABELS,
+    EVENT_LABELS,
     CAMERA_SETTINGS_LABELS,
     CAR_COMPONENT_LABELS,
     PLAYER_COMPONENT_LABELS,
@@ -23,15 +24,26 @@ class Actor:
         self.actor_id = actor["actor_id"]
         self.active_actor_id = None
         self.objects = objects
+        self.category: str = ""
+        self._secondary_category: str | None = None
         self.label_self()
         self.categorize_self()
         attribute = actor.get("attribute")
         if attribute is None:
-            return
+            return None
         active_actor: Active_Actor_Attribute | None = attribute.get("ActiveActor")
         if active_actor:
             self.active_actor_id = active_actor["actor"]
-            return
+            return None
+
+    def __repr__(self):
+        actor = f"Actor(actor={self.actor_id}, active_actor={self.active_actor_id}, category={self.category})"
+        if self.secondary_category:
+            actor = actor[:-1] + f", secondary={self.secondary_category})"
+        attribute_key = list(self.attribute.keys())[0] if self.attribute else ""  # type: ignore
+        if attribute_key:
+            actor = actor[:-1] + f", attribute={attribute_key})"
+        return actor
 
     @staticmethod
     def label(raw_actor: Raw_Actor, objects: Dict[int, str]):
@@ -66,6 +78,14 @@ class Actor:
         )
         return labeled_raw_actor
 
+    @property
+    def secondary_category(self) -> str | None:
+        return self._secondary_category
+
+    @secondary_category.setter
+    def secondary_category(self, new_secondary_category: str):
+        self._secondary_category = new_secondary_category
+
     def label_self(self):
         labled_actor = Actor.label(self.raw, self.objects)
         self.object = labled_actor["object"]
@@ -74,29 +94,35 @@ class Actor:
         matched_label = LABELS.get(self.object)
         if matched_label:
             self.category = matched_label
-            self.secondary_category = None
-            return
+            self._secondary_category = None
+            return None
+
+        is_event = EVENT_LABELS.get(self.object)
+        if is_event:
+            self.category = "event"
+            self._secondary_category = is_event
+            return None
 
         is_camera_settings = CAMERA_SETTINGS_LABELS.get(self.object)
         if is_camera_settings:
             self.category = "camera_settings"
-            self.secondary_category = is_camera_settings
-            return
+            self._secondary_category = is_camera_settings
+            return None
 
         is_car_component = CAR_COMPONENT_LABELS.get(self.object)
         if is_car_component:
             self.category = "car_component"
-            self.secondary_category = is_car_component
-            return
+            self._secondary_category = is_car_component
+            return None
 
         is_player_component = PLAYER_COMPONENT_LABELS.get(self.object)
         if is_player_component:
             self.category = "player_component"
-            self.secondary_category = is_player_component
-            return
+            self._secondary_category = is_player_component
+            return None
 
         self.category = "Misc"
-        self.secondary_category = None
+        self._secondary_category = None
 
     def is_self(self, possible_self: Actor):
         return self.actor_id == possible_self.actor_id
@@ -106,6 +132,3 @@ class Actor:
 
     def owns(self, possible_child: Actor):
         return self.actor_id == possible_child.active_actor_id
-
-    def __repr__(self):
-        return str(self.raw)

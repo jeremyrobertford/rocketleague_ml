@@ -68,10 +68,14 @@ def process_rigid_body_position(
         return None
 
     car = frame.game.cars.get(updated_actor.actor_id)
+    if not frame.resync and car and car.player.actor_id in frame.game.do_not_track:
+        del frame.game.do_not_track[car.player.actor_id]
     if car:
-        _process_rigid_body_position(
-            updated_actor, frame, processor.include_car_positioning, car
-        )
+        if car.player.actor_id not in frame.game.do_not_track:
+            _process_rigid_body_position(
+                updated_actor, frame, processor.include_car_positioning, car
+            )
+            car.update_position(updated_actor)
         return None
 
     car_component = frame.game.car_components.get(updated_actor.actor_id)

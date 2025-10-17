@@ -88,8 +88,9 @@ class Game_Data_Wrangler:
             for game_data in game_datas:
                 try:
                     wrangle_game_data = self.wrangle_game(game_data)
+                    id = game_data["properties"]["Id"]
                     if save_output:
-                        self.save_wrangled_file("custom", wrangle_game_data)
+                        self.save_wrangled_file(f"{id}.json", wrangle_game_data)
                     else:
                         wrangled_games.append(wrangle_game_data)
 

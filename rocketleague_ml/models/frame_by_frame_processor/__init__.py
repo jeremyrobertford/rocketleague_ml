@@ -238,6 +238,7 @@ class Frame_By_Frame_Processor:
                     "TAGame.PRI_TA:bIsDistracted",
                     "TAGame.PRI_TA:bReady",
                     "Engine.Actor:bHidden",
+                    "Engine.PlayerReplicationInfo:bBot",
                 }
                 if (
                     updated_actor.object in ignore_objects
@@ -327,15 +328,22 @@ class Frame_By_Frame_Processor:
         frame = Frame(raw_frame, game)
         frame.calculate_match_time()
         frame.set_values_from_previous()
+        frame.processed_fields["index"] = f
 
         new_actors: Dict[int, Actor] = {}
 
         labeled_new_actors = [  # type: ignore
-            Actor.label(a, frame.game.objects) for a in frame.new_actors
+            Actor(a, frame.game.objects) for a in frame.new_actors
         ]
         labeled_updated_actors = [  # type: ignore
-            Actor.label(a, game.objects) for a in frame.updated_actors
+            Actor(a, game.objects) for a in frame.updated_actors
         ]
+
+        if (
+            "match_time_label" in frame.processed_fields
+            and frame.processed_fields["match_time_label"] <= "4:31"
+        ):
+            pass
 
         if frame.resync:
             frame.game.set_actors(frame)
@@ -364,7 +372,12 @@ class Frame_By_Frame_Processor:
         for updated_actor in delayed_updated_actors:
             self.process_updated_actor(updated_actor, frame)
 
-        if not frame.game.previous_frame.active and frame.active:
+        if (
+            not frame.game.previous_frame.active
+            and frame.active
+            and self.include_ball_positioning
+            and self.include_car_positioning
+        ):
             kickoff_players = self.determine_kickoff_players(game.previous_frame)
             for player_name in kickoff_players:
                 frame.processed_fields[f"{player_name}_kickoff"] = 1
@@ -383,6 +396,8 @@ class Frame_By_Frame_Processor:
         for f, raw_frame in enumerate(game.frames):
             try:
                 processed_frame = self.process_frame(raw_frame, game, f)
+                if processed_frame.round > 1:
+                    break
             except Exception:
                 if len(frames) == 0:
                     return []

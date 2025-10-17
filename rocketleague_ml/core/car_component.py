@@ -76,6 +76,7 @@ class Car_Component(Rigid_Body):
         self.car: Car = car
         self.amount = 0.0
         self.active = False
+        self.previous_activity: int = 0
 
         if not car_component.attribute:
             return None
@@ -91,6 +92,17 @@ class Car_Component(Rigid_Body):
         if "Boolean" in car_component.attribute:
             self.active = car_component.attribute["Boolean"]
             return None
+
+    @property
+    def secondary_category(self) -> str:
+        sc = self._secondary_category
+        if sc is None:
+            raise ValueError("Secondary category not assigned")
+        return sc
+
+    @secondary_category.setter
+    def secondary_category(self, new_secondary_category: str):
+        self._secondary_category = new_secondary_category
 
     def update_amount(self, updated_car_component: Actor):
         attribute = updated_car_component.attribute
@@ -119,6 +131,9 @@ class Car_Component(Rigid_Body):
             )
         active: bool | None = attribute.get("Boolean")
         if active is None:
+            byte = attribute.get("Byte")
+            if byte is not None:
+                self.previous_activity = byte
             active = attribute.get("Byte") == 3 if attribute.get("Byte") else None
             if active is None:
                 raise ValueError(
@@ -160,10 +175,10 @@ class Boost_Car_Component(Car_Component):
         return None
 
 
-class Dodge_Car_Component(Car_Component):
+class Flip_Car_Component(Car_Component):
     def __init__(self, car_component: Car_Component):
         super().__init__(car_component, car_component.car)
-        self.last_dodge: Position | None = None
+        self.last_flip: Position | None = None
         return None
 
     def dodge(self, dodge_actor: Actor) -> bool:
@@ -172,7 +187,7 @@ class Dodge_Car_Component(Car_Component):
                 f"Cannot perform dodge without dodge actor {dodge_actor.raw}"
             )
         dodge_torque = Position(dodge_actor.attribute["Location"])
-        if dodge_torque == self.last_dodge:
+        if dodge_torque == self.last_flip:
             return False
-        self.last_dodge = dodge_torque
+        self.last_flip = dodge_torque
         return True

@@ -26,3 +26,16 @@ def process_game_start(
         frame.game.deactivate_game()
         frame.calculate_match_time()
     return None
+
+
+def process_game_time_sync(
+    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
+):
+    if not updated_actor.attribute or "Int" not in updated_actor.attribute:
+        raise ValueError(f"Time sync attempted without time {updated_actor.raw}")
+    frame.game.match_time_remaining = updated_actor.attribute["Int"] + frame.delta
+    frame.calculate_match_time()
+    display_time = updated_actor.attribute["Int"]
+    mins, secs = divmod(display_time, 60)
+    frame.processed_fields["match_time_label"] = f"{mins}:{secs:02d}"
+    return None

@@ -28,6 +28,9 @@ class Frame:
         self.calculate_match_time()
         return None
 
+    def __repr__(self):
+        return f"Frame(time={self.match_time_label}, resync={self.resync}, new={len(self.new_actors)}, updated={len(self.updated_actors)})"
+
     def add_updated_actor_to_disconnected_car_component_updates(
         self, updated_actor: Actor
     ):
@@ -40,8 +43,9 @@ class Frame:
 
     def set_values_from_previous(self):
         one_time_event_keys = [
-            "kickoff" "demo",
-            "demod",
+            "kickoff",
+            "demo",
+            "demoed",
             "boost_pickup",
             "score",
             "shot",
@@ -50,14 +54,21 @@ class Frame:
             "goal",
             "team_ball_hit",
             "hit_ball",
-            "_jump_",
+            "_jump",
             "_byte",
             "_dodge",
+        ]
+        clear_positions_for_players = [
+            car.player.name for car in self.game.do_not_track.values()
         ]
         for key, value in self.game.previous_frame.processed_fields.items():
             ignore = False
             for one_time_event_key in one_time_event_keys:
                 if one_time_event_key in key:
+                    ignore = True
+                    break
+            for player in clear_positions_for_players:
+                if key.startswith(f"{player}_positioning"):
                     ignore = True
                     break
             if not ignore:
@@ -99,7 +110,6 @@ class Frame:
                 "delta": self.delta,
                 "round": self.round,
                 "active": self.active,
-                "match_time_label": self.match_time_label,
             }
             | self.processed_fields,
         )

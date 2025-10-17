@@ -12,7 +12,7 @@ from rocketleague_ml.core.car import (
     Car,
     Boost_Car_Component,
     Car_Component,
-    Dodge_Car_Component,
+    Flip_Car_Component,
 )
 from rocketleague_ml.core.camera_settings import Camera_Settings
 from rocketleague_ml.core.player import Player
@@ -41,6 +41,7 @@ class Game:
         self.in_overtime: bool = False
         self.overtime_elapsed: float = 0.0
         self.processed_frames: List[Frame] = []
+        self.do_not_track: Dict[int, Car] = {}
         return None
 
     @property
@@ -60,6 +61,10 @@ class Game:
         if b is None:
             raise ValueError("Ball not assigned")
         return b
+
+    def stop_tracking_position_for(self, car: Car):
+        self.do_not_track[car.player.actor_id] = car
+        return None
 
     def connect_disconnected_car_component(self, connection: Actor):
         if connection.active_actor_id is None:
@@ -81,13 +86,18 @@ class Game:
                         car_component.active = prev_boost.active
                 car.boost = car_component
             case "dodge":
-                car_component = Dodge_Car_Component(car_component)
+                car_component = Flip_Car_Component(car_component)
                 if car_component.actor_id in self.car_components:
                     prev_dodge = self.car_components[car_component.actor_id]
-                    if isinstance(prev_dodge, Dodge_Car_Component):
-                        car_component.last_dodge = prev_dodge.last_dodge
+                    if isinstance(prev_dodge, Flip_Car_Component):
+                        car_component.last_flip = prev_dodge.last_flip
                 car.dodge = car_component
             case "double_jump":
+                car_component = Flip_Car_Component(car_component)
+                if car_component.actor_id in self.car_components:
+                    prev_double_jump = self.car_components[car_component.actor_id]
+                    if isinstance(prev_double_jump, Flip_Car_Component):
+                        car_component.last_flip = prev_double_jump.last_flip
                 car.double_jump = car_component
             case "flip":
                 car.flip = car_component
@@ -124,12 +134,20 @@ class Game:
         camera_settings: Dict[int, Actor],
         unhandled_new_actors: Dict[int, Actor],
         delayed_new_actors: Dict[int, Actor],
+        previous_cars: Dict[int, Car],
         previous_car_components: Dict[
-            int, Car_Component | Boost_Car_Component | Dodge_Car_Component
+            int, Car_Component | Boost_Car_Component | Flip_Car_Component
         ],
     ):
         match new_actor.category:
             case "car":
+                if (
+                    new_actor.actor_id not in player_cars
+                    and new_actor.actor_id in previous_cars
+                ):
+                    previous_car = previous_cars[new_actor.actor_id]
+                    self.cars[previous_car.actor_id] = previous_car
+                    return None
                 if new_actor.actor_id not in player_cars:
                     self.disconnected_cars[new_actor.actor_id] = new_actor
                     return None
@@ -167,13 +185,20 @@ class Game:
                                 car_component.active = prev_boost.active
                         car.boost = car_component
                     case "dodge":
-                        car_component = Dodge_Car_Component(car_component)
+                        car_component = Flip_Car_Component(car_component)
                         if car_component.actor_id in previous_car_components:
                             prev_dodge = previous_car_components[car_component.actor_id]
-                            if isinstance(prev_dodge, Dodge_Car_Component):
-                                car_component.last_dodge = prev_dodge.last_dodge
+                            if isinstance(prev_dodge, Flip_Car_Component):
+                                car_component.last_flip = prev_dodge.last_flip
                         car.dodge = car_component
                     case "double_jump":
+                        car_component = Flip_Car_Component(car_component)
+                        if car_component.actor_id in self.car_components:
+                            prev_double_jump = self.car_components[
+                                car_component.actor_id
+                            ]
+                            if isinstance(prev_double_jump, Flip_Car_Component):
+                                car_component.last_flip = prev_double_jump.last_flip
                         car.double_jump = car_component
                     case "flip":
                         car.flip = car_component
@@ -204,12 +229,13 @@ class Game:
     def set_actors(self, frame: Frame):
         self._ball: Ball | None = None
         self.camera_settings: Dict[int, Camera_Settings] = {}
+        previous_cars = self.cars if hasattr(self, "cars") else {}
         self.cars: Dict[int, Car] = {}
-        prev_car_components = (
+        previous_car_components = (
             self.car_components if hasattr(self, "car_components") else {}
         )
         self.car_components: Dict[
-            int, Car_Component | Boost_Car_Component | Dodge_Car_Component
+            int, Car_Component | Boost_Car_Component | Flip_Car_Component
         ] = {}
         self.disconnected_cars: Dict[int, Actor] = {}
         self.disconnected_car_components: Dict[int, Actor] = {}
@@ -274,30 +300,32 @@ class Game:
         for na in frame.new_actors:
             new_actor = Actor(na, self.objects)
             self.process_setting_new_actor(
-                new_actor,
-                players,
-                player_cars,
-                player_teams,
-                car_components,
-                player_camera_settings,
-                camera_settings,
-                unhandled_new_actors,
-                delayed_new_actors,
-                prev_car_components,
+                new_actor=new_actor,
+                players=players,
+                player_cars=player_cars,
+                player_teams=player_teams,
+                car_components=car_components,
+                player_camera_settings=player_camera_settings,
+                camera_settings=camera_settings,
+                unhandled_new_actors=unhandled_new_actors,
+                delayed_new_actors=delayed_new_actors,
+                previous_cars=previous_cars,
+                previous_car_components=previous_car_components,
             )
 
         for new_actor in delayed_new_actors.values():
             self.process_setting_new_actor(
-                new_actor,
-                players,
-                player_cars,
-                player_teams,
-                car_components,
-                player_camera_settings,
-                camera_settings,
-                unhandled_new_actors,
-                delayed_new_actors,
-                prev_car_components,
+                new_actor=new_actor,
+                players=players,
+                player_cars=player_cars,
+                player_teams=player_teams,
+                car_components=car_components,
+                player_camera_settings=player_camera_settings,
+                camera_settings=camera_settings,
+                unhandled_new_actors=unhandled_new_actors,
+                delayed_new_actors=delayed_new_actors,
+                previous_cars=previous_cars,
+                previous_car_components=previous_car_components,
             )
 
         return None

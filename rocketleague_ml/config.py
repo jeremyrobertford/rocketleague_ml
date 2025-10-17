@@ -83,6 +83,7 @@ CAMERA_SETTINGS_LABELS = {
     "TAGame.CameraSettingsActor_TA:bUsingBehindView": "rear_cam",
     "TAGame.CameraSettingsActor_TA:ProfileSettings": "camera_settings",
 }
+EVENT_LABELS = {"TAGame.GameEvent_Soccar_TA:SecondsRemaining": "game_time"}
 LABELS = {
     "TAGame.CarComponent_TA:Vehicle": "vehicle",
     "TAGame.Ball_TA:GameEvent": "event",
@@ -99,7 +100,7 @@ LABELS = {
     "Engine.Pawn:PlayerReplicationInfo": "car_to_player",
     "TAGame.RBActor_TA:ReplicatedRBState": "rigid_body",
     "TAGame.CameraSettingsActor_TA:PRI": "settings_to_player",
-    "TAGame.Car_TA:ReplicatedDemolishExtended": "player_demod",
+    "TAGame.Car_TA:ReplicatedDemolishExtended": "player_demoed",
     "TAGame.VehiclePickup_TA:NewReplicatedPickupData": "boost_pickup",
     "TAGame.Ball_TA:HitTeamNum": "team_ball_hit",
 }

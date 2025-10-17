@@ -3,6 +3,9 @@ import pandas as pd
 from numpy.typing import NDArray
 from typing import Dict, List
 
+# TODO: Add polar angles to teammates, opponents, and ball
+# Adjust the polar angles so it is based off of car normal?
+
 
 def get_distancing_cols(game: pd.DataFrame, teams: Dict[str, List[str]]):
     distancing_cols: Dict[str, NDArray[np.float64]] = {}
