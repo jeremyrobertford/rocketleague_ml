@@ -33,6 +33,9 @@ class Rigid_Body(Actor):
             f"Positoning not found when creating rigid body {rigid_body.raw}"
         )
 
+    def __repr__(self):
+        return f"Rigid_Body(actor_id={self.actor_id}, label={self.body_label}, position={self.positioning.location})"
+
     def update_position(self, updated_actor: Actor):
         updated_actor = Rigid_Body(updated_actor, "")
         updated_actor.positioning.previous_linear_velocity = (

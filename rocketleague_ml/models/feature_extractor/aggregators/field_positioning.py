@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Dict
 from rocketleague_ml.models.feature_extractor.aggregators.helpers import (
-    get_time_percentage_and_stint_for_cols,
+    get_time_and_stint_for_cols,
 )
 
 
@@ -278,10 +278,10 @@ def aggregate_field_positioning(
         "In Opponents Goal": ["in_opponents_goal"],
     }
     for label, cols in positioning_columns.items():
-        percent_time, average_percent_stint = get_time_percentage_and_stint_for_cols(
+        percent_time, average_percent_stint = get_time_and_stint_for_cols(
             game, cols, main_player
         )
-        features[f"Percent Time {label}"] = percent_time
+        features[f"Time {label}"] = percent_time
         features[f"Average Stint {label}"] = average_percent_stint
 
     return features

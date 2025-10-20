@@ -54,9 +54,14 @@ class Frame:
             "goal",
             "team_ball_hit",
             "hit_ball",
-            "_jump",
-            "_byte",
-            "_dodge",
+            "_double_jump_x",
+            "_double_jump_y",
+            "_double_jump_z",
+            "_dodge_x",
+            "_dodge_y",
+            "_dodge_z",
+            "_activation",
+            "_component_usage_in_air",
         ]
         clear_positions_for_players = [
             car.player.name for car in self.game.do_not_track.values()
@@ -110,6 +115,7 @@ class Frame:
                 "delta": self.delta,
                 "round": self.round,
                 "active": self.active,
+                "match_time_label": "5:00",
             }
             | self.processed_fields,
         )

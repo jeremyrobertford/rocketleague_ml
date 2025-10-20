@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List
 from rocketleague_ml.models.feature_extractor.aggregators.helpers import (
-    get_time_percentage_and_stint_for_cols,
+    get_time_and_stint_for_cols,
 )
 
 
@@ -21,10 +21,10 @@ def aggregate_player_rotations(
     }
 
     for label, cols in player_rotation_columns.items():
-        percent_time, average_percent_stint = get_time_percentage_and_stint_for_cols(
+        percent_time, average_percent_stint = get_time_and_stint_for_cols(
             game, cols, main_player
         )
-        features[f"Percent Time while {label}"] = percent_time
+        features[f"Time while {label}"] = percent_time
         features[f"Average Stint while {label}"] = average_percent_stint
 
     player_rotation_columns = {
@@ -57,8 +57,7 @@ def aggregate_player_rotations(
         else:
             avg_rotation_speed = np.nan
 
-        total_time = game["delta"].sum()
-        features[f"{label} Rotation Speed"] = avg_rotation_speed / total_time
+        features[f"{label} Rotation Speed"] = avg_rotation_speed
 
         # Compute directional rotation counts
         from_to_counts = {(i, j): 0 for i in (1, 2, 3) for j in (1, 2, 3) if i != j}
@@ -70,10 +69,6 @@ def aggregate_player_rotations(
                 total_from_counts[roles[i]] += 1
 
         for (from_role, to_role), count in from_to_counts.items():
-            total = total_from_counts[from_role]
-            percent = count / total if total > 0 else 0
-            features[f"Percent Rotating From {label} {from_role} to {to_role}"] = (
-                percent
-            )
+            features[f"Count Rotating From {label} {from_role} to {to_role}"] = count
 
     return features

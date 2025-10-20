@@ -8,6 +8,8 @@ from rocketleague_ml.models.frame_by_frame_processor.processors.car_components i
     process_steer,
     process_car_component,
     process_component_usage_in_air,
+    process_boost_pickup,
+    process_demo,
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors.camera_settings import (
     process_camera_settings,
@@ -28,10 +30,6 @@ from rocketleague_ml.models.frame_by_frame_processor.processors.events import (
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors.rigid_bodies import (
     process_rigid_body_position,
-)
-from rocketleague_ml.models.frame_by_frame_processor.processors.misc import (
-    process_demo,
-    process_boost_pickup,
 )
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.frame import Frame

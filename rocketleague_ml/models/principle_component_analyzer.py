@@ -45,7 +45,7 @@ class Principle_Component_Analyzer:
             zero_heavy = [
                 "Boost Efficiency",
                 "Far From Ball Boost Efficiency",
-                "Percent Time while Slow",
+                "Time while Slow",
             ]
 
         skewed_features = features.copy()
@@ -204,7 +204,7 @@ class Principle_Component_Analyzer:
                 or "Boost Speed" in c
                 or "Rotating From" in c
             ],
-            "Percent Time while Supersonic",
+            "Time while Supersonic",
         ]
         features = features.drop(columns=drop_features, errors="ignore")
         return features

@@ -1,11 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+from rocketleague_ml.types.attributes import Rigid_Body_Attribute
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.frame import Frame
 from rocketleague_ml.core.car_component import (
     Simple_Car_Component,
     Flip_Car_Component,
 )
+from rocketleague_ml.core.rigid_body import Rigid_Body
 
 if TYPE_CHECKING:
     from rocketleague_ml.models.frame_by_frame_processor import Frame_By_Frame_Processor
@@ -84,36 +86,32 @@ def process_activate_component(
     car_component.update_activity(updated_actor)
     if not car_component.secondary_category:
         raise ValueError(f"Failed to update car component {updated_actor.raw}")
-    if (
+    include_in_processing = (
         processor.include_boost_management
         and car_component.secondary_category == "boost"
+    ) or (processor.include_movement and car_component.secondary_category != "boost")
+    if not updated_actor.attribute or "Byte" not in updated_actor.attribute:
+        raise ValueError(f"Byte not given for car component activity {updated_actor}")
+    new_bytes = updated_actor.attribute["Byte"]
+    if (
+        frame.resync
+        and car_component.previous_activity - 25 <= new_bytes
+        and new_bytes <= car_component.previous_activity
     ):
-        if updated_actor.attribute and updated_actor.attribute.get("Byte"):
-            frame.processed_fields[
-                car_component.car.player.name
-                + "_"
-                + car_component.secondary_category
-                + "_byte"
-            ] = updated_actor.attribute.get("Byte")
-    if processor.include_movement and car_component.secondary_category != "boost":
-        if not updated_actor.attribute or "Byte" not in updated_actor.attribute:
-            raise ValueError(
-                f"Byte not given for car component activity {updated_actor}"
-            )
-        new_bytes = updated_actor.attribute["Byte"]
-        if (
-            frame.resync
-            and car_component.previous_activity - 25 <= new_bytes
-            and new_bytes <= car_component.previous_activity
-        ):
-            return None
-        if updated_actor.attribute and updated_actor.attribute.get("Byte"):
-            frame.processed_fields[
-                car_component.car.player.name
-                + "_"
-                + car_component.secondary_category
-                + "_byte"
-            ] = updated_actor.attribute.get("Byte")
+        return None
+    if include_in_processing:
+        frame.processed_fields[
+            car_component.car.player.name
+            + "_"
+            + car_component.secondary_category
+            + "_activation"
+        ] = car_component.activity
+        frame.processed_fields[
+            car_component.car.player.name
+            + "_"
+            + car_component.secondary_category
+            + "_active"
+        ] = (1 if car_component.active else 0)
     return None
 
 
@@ -132,6 +130,53 @@ def process_dodge(
         frame.processed_fields[field_label + "_x"] = car_component.last_flip.x
         frame.processed_fields[field_label + "_y"] = car_component.last_flip.y
         frame.processed_fields[field_label + "_z"] = car_component.last_flip.z
+    return None
+
+
+def process_boost_pickup(
+    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
+):
+    if not updated_actor.attribute or "PickupNew" not in updated_actor.attribute:
+        processor.logger.raise_exception(
+            "Boost pickup requires PickupNew attribute", updated_actor, frame
+        )
+        return None
+
+    instigator = updated_actor.attribute["PickupNew"]["instigator"]
+    if instigator in frame.game.cars:
+        car = frame.game.cars[instigator]
+        if updated_actor.actor_id not in frame.game.boost_pads:
+            rigid_body_attribute: Rigid_Body_Attribute = {
+                "RigidBody": {
+                    "sleeping": True,
+                    "location": {
+                        "x": car.positioning.location.x,
+                        "y": car.positioning.location.y,
+                        "z": car.positioning.location.z,
+                    },
+                    "rotation": {"x": 0, "y": 0, "z": 0, "w": 0},
+                    "linear_velocity": None,
+                    "angular_velocity": None,
+                    "previous_linear_velocity": None,
+                }
+            }
+            updated_actor.attribute = rigid_body_attribute
+            frame.game.boost_pads[updated_actor.actor_id] = Rigid_Body(
+                updated_actor, "boost_pad"
+            )
+        boost_pad = frame.game.boost_pads[updated_actor.actor_id]
+
+        if processor.include_boost_management:
+            field_label = f"{car.player.name}_boost_pickup"
+            frame.processed_fields[field_label + "_x"] = (
+                boost_pad.positioning.location.x
+            )
+            frame.processed_fields[field_label + "_y"] = (
+                boost_pad.positioning.location.y
+            )
+            frame.processed_fields[field_label + "_z"] = (
+                boost_pad.positioning.location.z
+            )
     return None
 
 
@@ -228,3 +273,43 @@ def process_car_component(
         return None
 
     raise ValueError(f"Unknown car component not updated {updated_actor.raw}")
+
+
+def process_demo(
+    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
+):
+    attribute = updated_actor.attribute
+    if not attribute or "DemolishExtended" not in attribute:
+        raise ValueError(f"Demo cannot occur without attribute {updated_actor.raw}")
+    demolition = attribute["DemolishExtended"]
+    attacker_car_actor_id = demolition["attacker"]["actor"]
+    victim_car_actor_id = demolition["victim"]["actor"]
+    if (
+        attacker_car_actor_id not in frame.game.cars
+        or victim_car_actor_id not in frame.game.cars
+    ):
+        frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
+        return None
+    attacker_car = frame.game.cars[attacker_car_actor_id]
+    victim_car = frame.game.cars[victim_car_actor_id]
+    if not attacker_car:
+        raise ValueError(f"No matching attacker car in demo actor {updated_actor.raw}")
+    if not victim_car:
+        raise ValueError(f"No matching victim car in demo actor {updated_actor.raw}")
+    if processor.include_player_demos:
+        field_label = f"{attacker_car.player.name}_demo"
+        frame.processed_fields[field_label + "_x"] = demolition["attacker_velocity"][
+            "x"
+        ]
+        frame.processed_fields[field_label + "_y"] = demolition["attacker_velocity"][
+            "y"
+        ]
+        frame.processed_fields[field_label + "_z"] = demolition["attacker_velocity"][
+            "z"
+        ]
+        field_label = f"{victim_car.player.name}_demoed"
+        frame.processed_fields[field_label + "_x"] = demolition["victim_velocity"]["x"]
+        frame.processed_fields[field_label + "_y"] = demolition["victim_velocity"]["y"]
+        frame.processed_fields[field_label + "_z"] = demolition["victim_velocity"]["z"]
+        frame.game.stop_tracking_position_for(victim_car)
+    return None

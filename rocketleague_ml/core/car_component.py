@@ -76,6 +76,7 @@ class Car_Component(Rigid_Body):
         self.car: Car = car
         self.amount = 0.0
         self.active = False
+        self.activity: int = 0
         self.previous_activity: int = 0
 
         if not car_component.attribute:
@@ -129,18 +130,14 @@ class Car_Component(Rigid_Body):
             raise ValueError(
                 f"Attribute not found when updating activity for {self.actor_id}: {updated_actor.raw}"
             )
-        active: bool | None = attribute.get("Boolean")
-        if active is None:
-            byte = attribute.get("Byte")
-            if byte is not None:
-                self.previous_activity = byte
-            active = attribute.get("Byte") == 3 if attribute.get("Byte") else None
-            if active is None:
-                raise ValueError(
-                    f"Boolean not found when updating activity for {self.actor_id}: {updated_actor.raw}"
-                )
-
-        self.active = active
+        byte = attribute.get("Byte")
+        if byte is None:
+            raise ValueError(
+                f"Activity not found when updating activity for {self.actor_id}: {updated_actor.raw}"
+            )
+        self.previous_activity = self.activity
+        self.activity = byte
+        self.active = byte % 2 == 1
         return None
 
 
@@ -148,7 +145,7 @@ class Boost_Car_Component(Car_Component):
     def __init__(self, car_component: Car_Component):
         super().__init__(car_component, car_component.car)
         self.pickups = 0
-        self.amount = 0
+        self.amount = 33
 
         if not car_component.attribute:
             return None
@@ -157,8 +154,11 @@ class Boost_Car_Component(Car_Component):
 
         replicated_boost = car_component.attribute["ReplicatedBoost"]
         self.pickups = replicated_boost["grant_count"]
-        self.amount = replicated_boost["boost_amount"]
+        self.amount = self.convert_boost_amount(replicated_boost["boost_amount"])
         return None
+
+    def convert_boost_amount(self, boost_amount: int):
+        return int(boost_amount / 255 * 100)
 
     def update_amount(self, updated_car_component: Actor):
         if (
@@ -171,7 +171,7 @@ class Boost_Car_Component(Car_Component):
 
         replicated_boost = updated_car_component.attribute["ReplicatedBoost"]
         self.pickups = replicated_boost["grant_count"]
-        self.amount = replicated_boost["boost_amount"]
+        self.amount = self.convert_boost_amount(replicated_boost["boost_amount"])
         return None
 
 

@@ -13,6 +13,12 @@ from .speed import (
 from .mechanics import (
     aggregate_mechanics,
 )
+from .distancing import (
+    aggregate_distancing,
+)
+from .possession import (
+    aggregate_possession,
+)
 
 __all__ = [
     "aggregate_boost_usage",
@@ -20,4 +26,6 @@ __all__ = [
     "aggregate_field_positioning",
     "aggregate_speed",
     "aggregate_mechanics",
+    "aggregate_distancing",
+    "aggregate_possession",
 ]

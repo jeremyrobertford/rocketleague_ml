@@ -1,4 +1,7 @@
 import math
+import numpy as np
+import pandas as pd
+from typing import Tuple
 from rocketleague_ml.types.attributes import Rotation_Dict
 from rocketleague_ml.config import BOOST_PAD_MAP
 
@@ -6,6 +9,58 @@ from rocketleague_ml.config import BOOST_PAD_MAP
 def convert_byte_to_float(bytes: int):
     byte_val = max(0, min(255, bytes))
     return (byte_val - 128) / 127.0
+
+
+def quat_to_euler(
+    qx: float,
+    qy: float,
+    qz: float,
+    qw: float,
+) -> Tuple[float, float, float]:
+    """
+    Converts quaternion rotation (x, y, z, w) to yaw, pitch, and roll in radians.
+
+    Returns:
+        yaw   (float or np.ndarray): rotation about Z (facing direction, horizontal turn)
+        pitch (float or np.ndarray): rotation about Y (nose up/down)
+        roll  (float or np.ndarray): rotation about X (banking/tilting)
+    """
+    # Yaw (around Z axis)
+    yaw = np.arctan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy**2 + qz**2))
+    # Pitch (around Y axis)
+    pitch = np.arcsin(np.clip(2 * (qw * qy - qz * qx), -1.0, 1.0))
+    # Roll (around X axis)
+    roll = np.arctan2(2 * (qw * qx + qy * qz), 1 - 2 * (qx**2 + qy**2))
+
+    return yaw, pitch, roll  # type: ignore
+
+
+def series_quat_to_euler(
+    qx: pd.Series,
+    qy: pd.Series,
+    qz: pd.Series,
+    qw: pd.Series,
+) -> Tuple[
+    np.ndarray[Tuple[int], np.dtype[np.float64]],
+    np.ndarray[Tuple[int], np.dtype[np.float64]],
+    np.ndarray[Tuple[int], np.dtype[np.float64]],
+]:
+    """
+    Converts quaternion rotation (x, y, z, w) to yaw, pitch, and roll in radians.
+
+    Returns:
+        yaw   (float or np.ndarray): rotation about Z (facing direction, horizontal turn)
+        pitch (float or np.ndarray): rotation about Y (nose up/down)
+        roll  (float or np.ndarray): rotation about X (banking/tilting)
+    """
+    # Yaw (around Z axis)
+    yaw = np.arctan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy**2 + qz**2))
+    # Pitch (around Y axis)
+    pitch = np.arcsin(np.clip(2 * (qw * qy - qz * qx), -1.0, 1.0))
+    # Roll (around X axis)
+    roll = np.arctan2(2 * (qw * qx + qy * qz), 1 - 2 * (qx**2 + qy**2))
+
+    return yaw, pitch, roll  # type: ignore
 
 
 def convert_euler_to_quat(
