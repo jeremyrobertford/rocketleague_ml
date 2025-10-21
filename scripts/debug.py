@@ -44,7 +44,7 @@ def main():
 
         return result
 
-    # process()
+    process()
 
     def extract_features():  # pyright: ignore[reportUnusedFunction]
         processed_game = pipeline.processor.load_processed_file("debug.csv")

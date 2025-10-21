@@ -8,7 +8,7 @@ from rocketleague_ml.config import BOOST_PAD_MAP
 
 def convert_byte_to_float(bytes: int):
     byte_val = max(0, min(255, bytes))
-    return (byte_val - 128) / 127.0
+    return np.clip((byte_val - 128) / 128.0, -1, 1)
 
 
 def quat_to_euler(

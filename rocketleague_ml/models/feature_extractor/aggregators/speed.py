@@ -30,4 +30,5 @@ def aggregate_speed(game: pd.DataFrame, main_player: str) -> Dict[str, float]:
     features[f"Average Speed"] = (
         game[f"{main_player}_positioning_linear_velocity"].mean() / 2300
     )
+
     return features

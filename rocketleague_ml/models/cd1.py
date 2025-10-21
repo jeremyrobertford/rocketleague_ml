@@ -1,8 +1,13 @@
+# type: ignore
 # pyright: reportUnusedVariable=false
 import math
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+
+# RLUtilities imports
+from rlutilities.simulation import Game, Ball, Car, Input
+from rlutilities.linear_algebra import vec3, mat3, transpose, norm, dot
 from rocketleague_ml.core.frame import Frame
 
 
@@ -28,6 +33,15 @@ class Vector3:
     y: float
     z: float
 
+    @staticmethod
+    def from_vec3(v: vec3) -> "Vector3":
+        """Convert RLUtilities vec3 to Vector3."""
+        return Vector3(v[0], v[1], v[2])
+
+    def to_vec3(self) -> vec3:
+        """Convert to RLUtilities vec3."""
+        return vec3(self.x, self.y, self.z)
+
     def magnitude(self) -> float:
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
@@ -49,13 +63,6 @@ class Vector3:
     def dot(self, other: "Vector3") -> float:
         return self.x * other.x + self.y * other.y + self.z * other.z
 
-    def cross(self, other: "Vector3") -> "Vector3":
-        return Vector3(
-            self.y * other.z - self.z * other.y,
-            self.z * other.x - self.x * other.z,
-            self.x * other.y - self.y * other.x,
-        )
-
     def distance_to(self, other: "Vector3") -> float:
         return (self - other).magnitude()
 
@@ -64,115 +71,42 @@ class Vector3:
 
 
 @dataclass
-class Quaternion:
-    x: float
-    y: float
-    z: float
-    w: float
-
-    def to_rotation_matrix(self) -> List[List[float]]:
-        """Convert quaternion to 3x3 rotation matrix."""
-        xx = self.x * self.x
-        yy = self.y * self.y
-        zz = self.z * self.z
-        xy = self.x * self.y
-        xz = self.x * self.z
-        yz = self.y * self.z
-        wx = self.w * self.x
-        wy = self.w * self.y
-        wz = self.w * self.z
-
-        return [
-            [1 - 2 * (yy + zz), 2 * (xy - wz), 2 * (xz + wy)],
-            [2 * (xy + wz), 1 - 2 * (xx + zz), 2 * (yz - wx)],
-            [2 * (xz - wy), 2 * (yz + wx), 1 - 2 * (xx + yy)],
-        ]
-
-    def rotate_vector(self, v: Vector3) -> Vector3:
-        """Rotate a vector by this quaternion."""
-        matrix = self.to_rotation_matrix()
-        return Vector3(
-            matrix[0][0] * v.x + matrix[0][1] * v.y + matrix[0][2] * v.z,
-            matrix[1][0] * v.x + matrix[1][1] * v.y + matrix[1][2] * v.z,
-            matrix[2][0] * v.x + matrix[2][1] * v.y + matrix[2][2] * v.z,
-        )
-
-    def get_forward_vector(self) -> Vector3:
-        return self.rotate_vector(Vector3(1, 0, 0))
-
-    def get_up_vector(self) -> Vector3:
-        return self.rotate_vector(Vector3(0, 0, 1))
-
-    def get_right_vector(self) -> Vector3:
-        return self.rotate_vector(Vector3(0, 1, 0))
-
-
-@dataclass
-class CarHitbox:
-    length: float
-    width: float
-    height: float
-    offset: Vector3 | None = None
-
-    def __post_init__(self):
-        if self.offset is None:
-            self.offset = Vector3(0, 0, 0)
-
-
-@dataclass
 class BallPlayerCollision:
     """Collision between ball and a player."""
 
     collision_type: CollisionType = CollisionType.BALL_PLAYER
     player_name: str = ""
+    player_collision_region: str = ""
+    frame_number: int = 0
+    substep: int = 0  # Which substep in simulation
 
     # Ball data
-    ball_position: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    ball_velocity_before: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    ball_velocity_after: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    ball_velocity_change: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    ball_impact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-
-    # Player data
-    player_position: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    player_rotation: Optional[Quaternion] = None
+    ball_velocity: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     player_velocity: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    car_impact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    car_impact_surface: str = ""
 
     # Physics
-    impulse_magnitude: float = 0.0
-    impulse_vector: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
+    impulse: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     collision_normal: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-
-    confidence: float = 0.0  # 0.0 to 1.0
+    ball_contact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
+    player_contact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
 
 
 @dataclass
 class BallEnvironmentCollision:
-    """Collision between ball and environment (walls, ground, ceiling)."""
+    """Collision between ball and environment."""
 
     collision_type: CollisionType = CollisionType.BALL_ENVIRONMENT
     surface: EnvironmentSurface = EnvironmentSurface.GROUND
+    frame_number: int = 0
+    substep: int = 0
 
-    # Ball data
     ball_position: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     ball_velocity_before: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     ball_velocity_after: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     ball_velocity_change: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    ball_impact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
 
-    # Environment data
     wall_normal: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    impact_location: Vector3 = field(
-        default_factory=lambda: Vector3(0, 0, 0)
-    )  # Where on the wall
-
-    # Physics
     impulse_magnitude: float = 0.0
-    impulse_vector: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-
-    confidence: float = 0.0
 
 
 @dataclass
@@ -182,24 +116,19 @@ class PlayerPlayerCollision:
     collision_type: CollisionType = CollisionType.PLAYER_PLAYER
     player1_name: str = ""
     player2_name: str = ""
+    frame_number: int = 0
+    substep: int = 0
 
-    # Player 1 data
     player1_position: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     player1_velocity_before: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     player1_velocity_after: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    player1_impact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
 
-    # Player 2 data
     player2_position: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     player2_velocity_before: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     player2_velocity_after: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    player2_impact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
 
-    # Physics
     collision_normal: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     relative_velocity: float = 0.0
-
-    confidence: float = 0.0
 
 
 @dataclass
@@ -209,18 +138,14 @@ class PlayerEnvironmentCollision:
     collision_type: CollisionType = CollisionType.PLAYER_ENVIRONMENT
     player_name: str = ""
     surface: EnvironmentSurface = EnvironmentSurface.GROUND
+    frame_number: int = 0
+    substep: int = 0
 
-    # Player data
     player_position: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     player_velocity_before: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     player_velocity_after: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    player_impact_surface: str = ""  # Which part of car hit
 
-    # Environment data
     wall_normal: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    impact_location: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-
-    confidence: float = 0.0
 
 
 CollisionEvent = (
@@ -236,12 +161,12 @@ class FrameCollisions:
     """All collisions detected in a single frame."""
 
     frame_number: int
-    ball_player_collisions: List[BallPlayerCollision] = field(default_factory=list)  # type: ignore
-    ball_environment_collisions: List[BallEnvironmentCollision] = field(  # type: ignore
+    ball_player_collisions: List[BallPlayerCollision] = field(default_factory=list)
+    ball_environment_collisions: List[BallEnvironmentCollision] = field(
         default_factory=list
     )
-    player_player_collisions: List[PlayerPlayerCollision] = field(default_factory=list)  # type: ignore
-    player_environment_collisions: List[PlayerEnvironmentCollision] = field(  # type: ignore
+    player_player_collisions: List[PlayerPlayerCollision] = field(default_factory=list)
+    player_environment_collisions: List[PlayerEnvironmentCollision] = field(
         default_factory=list
     )
 
@@ -258,920 +183,718 @@ class FrameCollisions:
         """Check if any collisions occurred."""
         return len(self.get_all_collisions()) > 0
 
-    def get_ball_collisions(
-        self,
-    ) -> List[BallPlayerCollision | BallEnvironmentCollision]:
-        """Get all collisions involving the ball."""
-        return self.ball_player_collisions + self.ball_environment_collisions
+
+def mat3_vec3_mul(M: mat3, v: vec3) -> vec3:
+    # Use M[(row, col)] indexing
+    return vec3(
+        M[(0, 0)] * v[0] + M[(0, 1)] * v[1] + M[(0, 2)] * v[2],
+        M[(1, 0)] * v[0] + M[(1, 1)] * v[1] + M[(1, 2)] * v[2],
+        M[(2, 0)] * v[0] + M[(2, 1)] * v[1] + M[(2, 2)] * v[2],
+    )
 
 
-class RocketLeagueArena:
-    """Standard Rocket League arena dimensions (Soccar)."""
+def get_car_collision_region(car, contact_point: vec3) -> str:
+    """
+    Map a world-space contact point on the car to a descriptive region string.
+    'tire', 'roof', and 'windshield' are used only when contact is clearly
+    near those specific surfaces.
+    """
+    rel = contact_point - car.position
+    local = mat3_vec3_mul(transpose(car.orientation), rel - car.hitbox_offset)
+    local[0] = -local[0]
 
-    FIELD_LENGTH = 10240
-    FIELD_WIDTH = 8192
-    FIELD_HEIGHT = 2044
-    GOAL_WIDTH = 1786
-    GOAL_HEIGHT = 642
-    GOAL_DEPTH = 880
-    CORNER_RADIUS = 1152
+    hx, hy, hz = car.hitbox_widths[0], car.hitbox_widths[1], car.hitbox_widths[2]
 
-    @classmethod
-    def get_boundaries(cls) -> Dict[str, Tuple[float, float]]:
-        return {
-            "x": (-cls.FIELD_LENGTH / 2, cls.FIELD_LENGTH / 2),
-            "y": (-cls.FIELD_WIDTH / 2, cls.FIELD_WIDTH / 2),
-            "z": (0, cls.FIELD_HEIGHT),
-        }
+    # Thresholds (tweakable)
+    front_t = 0.35 * hy
+    rear_t = -0.35 * hy
+    side_t = 0.35 * hx
+
+    # Height zones (relative to center)
+    roof_zone = 0.7 * hz  # top 30%
+    windshield_zone = 0.3 * hz  # upper-mid band
+    floor_zone = -0.7 * hz  # bottom 30%
+
+    # X region
+    if local[1] > front_t:
+        x_region = "front"
+    elif local[1] < rear_t:
+        x_region = "rear"
+    else:
+        x_region = "center"
+
+    # Y region
+    if local[0] > side_t:
+        y_region = "right"
+    elif local[0] < -side_t:
+        y_region = "left"
+    else:
+        y_region = "center"
+
+    # Z-based refinement
+    z = local[2]
+
+    # Distinguish by clear height bands
+    if z > roof_zone:
+        z_region = "roof"
+    elif z < floor_zone:
+        z_region = "floor"
+    else:
+        z_region = "mid"
+
+    # --- Combined logic ---
+    if z_region == "floor" and x_region in ("front", "rear"):
+        region = f"{x_region}-{y_region}-tire"
+    elif z_region == "roof" and x_region in ("front", "rear"):
+        region = f"{x_region}-{y_region}-roof"
+    elif (
+        x_region == "front" and y_region == "center" and windshield_zone < z < roof_zone
+    ):
+        region = "windshield"
+    else:
+        region = f"{x_region}-{y_region}-core"
+
+    return region
+
+
+def compute_collision(
+    ball: Ball,
+    player: Car,
+):
+    """
+    Estimate collision normal and impulse from two consecutive frames of Rocket League data.
+    """
+
+    # Approximate contact normal (ball moved toward car)
+    collision_normal = ball.position - player.position
+    collision_normal /= norm(collision_normal)
+
+    # Relative velocity before collision
+    relative_velocity = ball.velocity - player.velocity
+    velocity_along_normal = dot(relative_velocity, collision_normal)
+
+    # Impulse magnitude
+    j = -(1 + ball.restitution) * velocity_along_normal / (1 / ball.mass + 1 / 180)
+    impulse = j * collision_normal
+
+    # Apply impulse to velocities
+    ball_velocity = ball.velocity + impulse / ball.mass
+    player_velocity = player.velocity + impulse / 180
+
+    contact_point = ball.position - collision_normal * ball.collision_radius
+    car_contact_point = closest_point_on_hitbox(player, contact_point)
+
+    return {
+        "collision_normal": collision_normal,
+        "impulse": impulse,
+        "ball_velocity": ball_velocity,
+        "player_velocity": player_velocity,
+        "player_collision_region": get_car_collision_region(
+            player, ball.position - collision_normal * ball.collision_radius
+        ),
+        "ball_contact_point": contact_point,
+        "player_contact_point": car_contact_point,
+    }
+
+
+def closest_point_on_hitbox(car: Car, point: vec3) -> vec3:
+
+    rel = vec3(
+        point[0] - car.position[0],
+        point[1] - car.position[1],
+        point[2] - car.position[2],
+    )
+    local_point = mat3_vec3_mul(transpose(car.orientation), rel)
+    local_point = vec3(
+        local_point[0] - car.hitbox_offset[0],
+        local_point[1] - car.hitbox_offset[1],
+        local_point[2] - car.hitbox_offset[2],
+    )
+
+    # clamp to half-widths
+    lx = max(-car.hitbox_widths[0], min(local_point[0], car.hitbox_widths[0]))
+    ly = max(-car.hitbox_widths[1], min(local_point[1], car.hitbox_widths[1]))
+    lz = max(-car.hitbox_widths[2], min(local_point[2], car.hitbox_widths[2]))
+
+    local_clamped = vec3(lx, ly, lz)
+    # back to world: car.position + R * (hitbox_offset + local_clamped)
+    world_offset = vec3(
+        car.hitbox_offset[0] + local_clamped[0],
+        car.hitbox_offset[1] + local_clamped[1],
+        car.hitbox_offset[2] + local_clamped[2],
+    )
+    world_point = vec3(
+        car.position[0] + mat3_vec3_mul(car.orientation, world_offset)[0],
+        car.position[1] + mat3_vec3_mul(car.orientation, world_offset)[1],
+        car.position[2] + mat3_vec3_mul(car.orientation, world_offset)[2],
+    )
+    return world_point
 
 
 class RocketLeagueCollisionDetector:
+    """
+    High-granularity collision detector using RLUtilities simulation.
+
+    This detector:
+    1. Takes a Frame and sets up an RLUtilities Game state
+    2. Steps the simulation forward with small timesteps
+    3. Detects collisions by monitoring state changes between substeps
+    4. Returns detailed collision information
+    """
+
+    # Physics constants
     BALL_MASS = 30.0
     BALL_RADIUS = 91.25
+    CAR_MASS = 180.0  # Approximate
 
-    HITBOX_PRESETS = {
-        "octane": CarHitbox(118.007, 84.1995, 36.1591, Vector3(13.88, 0, 20.75)),
-        "dominus": CarHitbox(127.927, 83.2800, 31.3000, Vector3(9.00, 0, 15.75)),
-        "plank": CarHitbox(128.82, 84.67, 29.39, Vector3(3.50, 0, 18.26)),
-        "breakout": CarHitbox(131.49, 80.52, 30.30, Vector3(1.42, 0, 16.50)),
-        "hybrid": CarHitbox(127.02, 82.19, 34.16, Vector3(0.97, 0, 18.29)),
-        "merc": CarHitbox(121.41, 83.91, 41.66, Vector3(-2.30, 0, 28.30)),
-    }
+    # Detection thresholds (much tighter for substep detection)
+    BALL_VELOCITY_THRESHOLD = 10.0  # Smaller threshold for substeps
+    PLAYER_VELOCITY_THRESHOLD = 50.0
+    COLLISION_DISTANCE_THRESHOLD = 150.0
 
-    # Detection thresholds
-    BALL_PLAYER_MAX_DISTANCE = 200.0
-    BALL_VELOCITY_CHANGE_THRESHOLD = 50.0
-    PLAYER_VELOCITY_CHANGE_THRESHOLD = 100.0
-    ENVIRONMENT_THRESHOLD = 25.0
-    PLAYER_PLAYER_MAX_DISTANCE = 150.0
+    # Simulation parameters
+    SUBSTEP_DT = 1.0 / 120.0  # Step at 144Hz (default RL physics rate)
+    FRAME_TIME = 1.0 / 30.0  # Standard replay frame time
 
-    def __init__(self, ball_mass: float = BALL_MASS, default_hitbox: str = "octane"):
-        self.ball_mass = ball_mass
-        self.default_hitbox = self.HITBOX_PRESETS.get(
-            default_hitbox, self.HITBOX_PRESETS["octane"]
-        )
-        self.arena = RocketLeagueArena()
+    def __init__(self, substep_dt: float = SUBSTEP_DT):
+        """
+        Initialize the collision detector.
 
-    def parse_frame(self, frame: Frame) -> Tuple[
-        Tuple[Vector3, Vector3],  # Ball (pos, vel)
-        Dict[str, Tuple[Vector3, Vector3, Quaternion]],  # Players
-    ]:
-        """Parse frame into structured data."""
+        Args:
+            substep_dt: Time delta for each simulation substep (default: 1/120s)
+        """
+        self.substep_dt = substep_dt
+        self.substeps_per_frame = (
+            int(self.FRAME_TIME / substep_dt) + 1
+        )  # add extra for frame time rounding
+
+    def get_player_input(self, frame: Frame, player_name: str) -> Input:
+        """Extract player inputs from frame data."""
         frame_data = frame.processed_fields
-        ball_pos = Vector3(
-            frame_data.get("ball_positioning_x", 0),
-            frame_data.get("ball_positioning_y", 0),
-            frame_data.get("ball_positioning_z", 0),
+
+        controls = Input()
+        controls.throttle = frame_data.get(f"{player_name}_throttle", 0)
+        controls.steer = frame_data.get(f"{player_name}_steering", 0)
+        controls.jump = frame_data.get(f"{player_name}_jump_active", 0) == 1
+        controls.boost = frame_data.get(f"{player_name}_boost_active", 0) == 1
+        controls.handbrake = frame_data.get(f"{player_name}_drift_active", 0) == 1
+
+        return controls
+
+    def frame_to_game_state(self, frame: Frame) -> Tuple[Game, Dict[str, int]]:
+        """
+        Convert a Frame to RLUtilities Game state.
+
+        Returns:
+            Tuple of (Game object, dict mapping player names to car indices)
+        """
+        game = Game()
+        frame_data = frame.processed_fields
+        players = [
+            c.removesuffix("_positioning_x")
+            for c in frame_data
+            if c.endswith("_positioning_x") and not c.startswith("ball_")
+        ]
+        game.cars = [Car() for c in range(len(players))]
+
+        # Set ball state
+        game.ball.position = vec3(
+            frame_data["ball_positioning_x"],
+            frame_data["ball_positioning_y"],
+            frame_data["ball_positioning_z"],
         )
-        ball_vel = Vector3(
-            frame_data.get("ball_positioning_linear_velocity_x", 0),
-            frame_data.get("ball_positioning_linear_velocity_y", 0),
-            frame_data.get("ball_positioning_linear_velocity_z", 0),
+        game.ball.velocity = vec3(
+            frame_data["ball_positioning_linear_velocity_x"],
+            frame_data["ball_positioning_linear_velocity_y"],
+            frame_data["ball_positioning_linear_velocity_z"],
+        )
+        game.ball.angular_velocity = vec3(
+            frame_data["ball_positioning_angular_velocity_x"],
+            frame_data["ball_positioning_angular_velocity_y"],
+            frame_data["ball_positioning_angular_velocity_z"],
         )
 
-        players: Dict[str, Tuple[Vector3, Vector3, Quaternion]] = {}
-        for player in frame.game.players.values():
-            name = player.name
-            pos = Vector3(
-                frame_data.get(f"{name}_positioning_x", 0),
-                frame_data.get(f"{name}_positioning_y", 0),
-                frame_data.get(f"{name}_positioning_z", 0),
-            )
-            vel = Vector3(
-                frame_data.get(f"{name}_positioning_linear_velocity_x", 0),
-                frame_data.get(f"{name}_positioning_linear_velocity_y", 0),
-                frame_data.get(f"{name}_positioning_linear_velocity_z", 0),
-            )
-            rot = Quaternion(
-                frame_data.get(f"{name}_positioning_rotation_x", 0),
-                frame_data.get(f"{name}_positioning_rotation_y", 0),
-                frame_data.get(f"{name}_positioning_rotation_z", 0),
-                frame_data.get(f"{name}_positioning_rotation_w", 1),
-            )
-            players[name] = (pos, vel, rot)
+        # Set up cars
+        player_name_to_index: Dict[str, int] = {}
+        for idx, name in enumerate(players):
+            player_name_to_index[name] = idx
 
-        return (ball_pos, ball_vel), players
+            car = game.cars[idx]
 
-    def calculate_car_impact_point(
-        self,
-        car_pos: Vector3,
-        car_rot: Quaternion,
-        ball_pos: Vector3,
-        hitbox: CarHitbox,
-    ) -> Tuple[Vector3, str]:
-        """Calculate impact point and surface on car."""
-        forward = car_rot.get_forward_vector()
-        right = car_rot.get_right_vector()
-        up = car_rot.get_up_vector()
+            # Set car state
+            car.position = vec3(
+                frame_data[f"{name}_positioning_x"],
+                frame_data[f"{name}_positioning_y"],
+                frame_data[f"{name}_positioning_z"],
+            )
+            car.velocity = vec3(
+                frame_data[f"{name}_positioning_linear_velocity_x"],
+                frame_data[f"{name}_positioning_linear_velocity_y"],
+                frame_data[f"{name}_positioning_linear_velocity_z"],
+            )
+            car.angular_velocity = vec3(
+                frame_data[f"{name}_positioning_angular_velocity_x"],
+                frame_data[f"{name}_positioning_angular_velocity_y"],
+                frame_data[f"{name}_positioning_angular_velocity_z"],
+            )
 
-        hitbox_center = car_pos + car_rot.rotate_vector(
-            hitbox.offset or Vector3(0, 0, 0)
+            # Set rotation (quaternion -> orientation matrix)
+            qx = frame_data[f"{name}_positioning_rotation_x"]
+            qy = frame_data[f"{name}_positioning_rotation_y"]
+            qz = frame_data[f"{name}_positioning_rotation_z"]
+            qw = frame_data[f"{name}_positioning_rotation_w"]
+
+            # Convert quaternion to rotation matrix
+            car.orientation = self._quaternion_to_matrix(qx, qy, qz, qw)
+
+            # Set default input (no control)
+            car.controls = self.get_player_input(frame, name)
+
+        return game, player_name_to_index
+
+    def _quaternion_to_matrix(self, x: float, y: float, z: float, w: float) -> mat3:
+        """Convert quaternion to rotation matrix."""
+        xx, yy, zz = x * x, y * y, z * z
+        xy, xz, yz = x * y, x * z, y * z
+        wx, wy, wz = w * x, w * y, w * z
+
+        return mat3(
+            1 - 2 * (yy + zz),
+            2 * (xy - wz),
+            2 * (xz + wy),
+            2 * (xy + wz),
+            1 - 2 * (xx + zz),
+            2 * (yz - wx),
+            2 * (xz - wy),
+            2 * (yz + wx),
+            1 - 2 * (xx + yy),
         )
-        to_ball = ball_pos - hitbox_center
 
-        local_x = to_ball.dot(forward)
-        local_y = to_ball.dot(right)
-        local_z = to_ball.dot(up)
+    def get_hitbox_corners(self, car):
+        offsets = [
+            vec3(x, y, z)
+            for x in (-car.hitbox_widths[0], car.hitbox_widths[0])
+            for y in (-car.hitbox_widths[1], car.hitbox_widths[1])
+            for z in (-car.hitbox_widths[2], car.hitbox_widths[2])
+        ]
+        return [
+            car.position + car.orientation @ (car.hitbox_offset + o) for o in offsets
+        ]
 
-        half_length = hitbox.length / 2
-        half_width = hitbox.width / 2
-        half_height = hitbox.height / 2
-
-        clamped_x = max(-half_length, min(half_length, local_x))
-        clamped_y = max(-half_width, min(half_width, local_y))
-        clamped_z = max(-half_height, min(half_height, local_z))
-
-        surfaces: List[str] = []
-        if abs(clamped_x - local_x) < 0.01:
-            surfaces.append("front" if local_x > 0 else "back")
-        if abs(clamped_y - local_y) < 0.01:
-            surfaces.append("right" if local_y > 0 else "left")
-        if abs(clamped_z - local_z) < 0.01:
-            surfaces.append("roof" if local_z > 0 else "bottom")
-
-        surface_name = "_".join(surfaces) if surfaces else "center"
-        local_impact = (forward * clamped_x) + (right * clamped_y) + (up * clamped_z)
-        impact_point = hitbox_center + local_impact
-
-        return impact_point, surface_name
-
-    def detect_ball_player_collisions(
+    def detect_collisions_between_states(
         self,
-        prev_ball: Tuple[Vector3, Vector3],
-        curr_ball: Tuple[Vector3, Vector3],
-        prev_players: Dict[str, Tuple[Vector3, Vector3, Quaternion]],
-        curr_players: Dict[str, Tuple[Vector3, Vector3, Quaternion]],
-        player_hitboxes: Optional[Dict[str, str]] = None,
-    ) -> List[BallPlayerCollision]:
-        """Detect all ball-player collisions in this frame transition."""
-        prev_ball_pos, prev_ball_vel = prev_ball
-        curr_ball_pos, curr_ball_vel = curr_ball
-
-        ball_vel_change = curr_ball_vel - prev_ball_vel
-
-        if ball_vel_change.magnitude() < self.BALL_VELOCITY_CHANGE_THRESHOLD:
-            return []
-
-        collisions: List[BallPlayerCollision] = []
-        collision_candidates: List[Tuple[str, float, BallPlayerCollision]] = []
-
-        for name, (curr_pos, curr_vel, curr_rot) in curr_players.items():
-            if name not in prev_players:
-                continue
-
-            prev_pos, prev_vel, prev_rot = prev_players[name]
-
-            hitbox_type = (
-                player_hitboxes.get(name, "octane") if player_hitboxes else "octane"
-            )
-            hitbox = self.HITBOX_PRESETS.get(hitbox_type, self.default_hitbox)
-
-            car_impact_point, car_surface = self.calculate_car_impact_point(
-                curr_pos, curr_rot, curr_ball_pos, hitbox
-            )
-
-            impact_distance = car_impact_point.distance_to(curr_ball_pos)
-
-            # Score based on proximity and physics
-            if impact_distance > self.BALL_PLAYER_MAX_DISTANCE:
-                continue
-
-            confidence = 0.0
-            if impact_distance < self.BALL_RADIUS + 20:
-                confidence = 1.0
-            elif impact_distance < self.BALL_RADIUS + 50:
-                confidence = 0.8
-            elif impact_distance < 150:
-                confidence = 0.5
-            else:
-                confidence = 0.2
-
-            # Velocity alignment bonus
-            if prev_vel.magnitude() > 0:
-                vel_align = prev_vel.normalized().dot(ball_vel_change.normalized())
-                if vel_align > 0:
-                    confidence = min(1.0, confidence + vel_align * 0.2)
-
-            collision_normal = ball_vel_change.normalized()
-            ball_impact_point = curr_ball_pos - (collision_normal * self.BALL_RADIUS)
-            impulse_vec = ball_vel_change * self.ball_mass
-
-            collision = BallPlayerCollision(
-                player_name=name,
-                ball_position=curr_ball_pos,
-                ball_velocity_before=prev_ball_vel,
-                ball_velocity_after=curr_ball_vel,
-                ball_velocity_change=ball_vel_change,
-                ball_impact_point=ball_impact_point,
-                player_position=curr_pos,
-                player_rotation=curr_rot,
-                player_velocity=curr_vel,
-                car_impact_point=car_impact_point,
-                car_impact_surface=car_surface,
-                impulse_magnitude=impulse_vec.magnitude(),
-                impulse_vector=impulse_vec,
-                collision_normal=collision_normal,
-                confidence=confidence,
-            )
-
-            collision_candidates.append((name, confidence, collision))
-
-        # Sort by confidence and take top candidates
-        collision_candidates.sort(key=lambda x: x[1], reverse=True)
-
-        # In a pinch, multiple players can hit simultaneously
-        # Take all with high confidence or top 2 with medium+ confidence
-        for name, conf, collision in collision_candidates:
-            if conf > 0.7:  # High confidence
-                collisions.append(collision)
-            elif conf > 0.4 and len(collisions) < 2:  # Possible pinch
-                collisions.append(collision)
-
-        return collisions
-
-    def is_ball_rolling_on_surface(
-        self,
-        ball_pos: Vector3,
-        ball_vel: Vector3,
-        surface_normal: Vector3,
-        surface_height: float,
-    ) -> bool:
-        """
-        Check if ball is rolling on a surface vs bouncing off it.
-
-        Rolling = ball is on surface and velocity is mostly parallel to it.
-        Bouncing = ball velocity has significant perpendicular component.
-        """
-        # Check if ball is resting on surface
-        distance_to_surface = abs(ball_pos.dot(surface_normal) - surface_height)
-        if distance_to_surface > self.BALL_RADIUS + 10:
-            return False  # Not on surface
-
-        # Check velocity direction relative to surface
-        normal_velocity = abs(ball_vel.dot(surface_normal))
-        total_velocity = ball_vel.magnitude()
-
-        if total_velocity < 10:
-            return True  # Nearly stationary on surface = rolling
-
-        # If most velocity is perpendicular to surface = bouncing
-        # If most velocity is parallel to surface = rolling
-        perpendicular_ratio = normal_velocity / total_velocity
-
-        return perpendicular_ratio < 0.3  # Less than 30% perpendicular = rolling
-
-    def detect_ball_environment_collisions(
-        self,
-        prev_ball: Tuple[Vector3, Vector3],
-        curr_ball: Tuple[Vector3, Vector3],
-    ) -> List[BallEnvironmentCollision]:
-        """Detect ball collisions with walls, ground, ceiling (bounces only, not rolling)."""
-        prev_ball_pos, prev_ball_vel = prev_ball
-        curr_ball_pos, curr_ball_vel = curr_ball
-
-        ball_vel_change = curr_ball_vel - prev_ball_vel
-
-        if ball_vel_change.magnitude() < self.BALL_VELOCITY_CHANGE_THRESHOLD:
-            return []
-
-        collisions: List[BallEnvironmentCollision] = []
-        bounds = self.arena.get_boundaries()
-
-        # Ground
-        if curr_ball_pos.z <= (self.BALL_RADIUS + self.ENVIRONMENT_THRESHOLD):
-            ground_normal = Vector3(0, 0, 1)
-
-            # Skip if ball is just rolling on ground
-            if self.is_ball_rolling_on_surface(
-                curr_ball_pos, curr_ball_vel, ground_normal, 0
-            ):
-                return collisions  # Ball rolling, not bouncing
-
-            # Check for actual bounce (velocity reversed in z direction)
-            if ball_vel_change.z > 0 and prev_ball_vel.z < 0:  # Was falling, now rising
-                impulse_vec = ball_vel_change * self.ball_mass
-                collisions.append(
-                    BallEnvironmentCollision(
-                        surface=EnvironmentSurface.GROUND,
-                        ball_position=curr_ball_pos,
-                        ball_velocity_before=prev_ball_vel,
-                        ball_velocity_after=curr_ball_vel,
-                        ball_velocity_change=ball_vel_change,
-                        ball_impact_point=Vector3(curr_ball_pos.x, curr_ball_pos.y, 0),
-                        wall_normal=ground_normal,
-                        impact_location=Vector3(curr_ball_pos.x, curr_ball_pos.y, 0),
-                        impulse_magnitude=impulse_vec.magnitude(),
-                        impulse_vector=impulse_vec,
-                        confidence=1.0,
-                    )
-                )
-
-        # Ceiling
-        if curr_ball_pos.z >= (
-            bounds["z"][1] - self.BALL_RADIUS - self.ENVIRONMENT_THRESHOLD
-        ):
-            ceiling_normal = Vector3(0, 0, -1)
-            ceiling_height = bounds["z"][1]
-
-            # Skip if ball is rolling on ceiling
-            if self.is_ball_rolling_on_surface(
-                curr_ball_pos, curr_ball_vel, ceiling_normal, ceiling_height
-            ):
-                return collisions
-
-            if ball_vel_change.z < 0 and prev_ball_vel.z > 0:  # Was rising, now falling
-                impulse_vec = ball_vel_change * self.ball_mass
-                collisions.append(
-                    BallEnvironmentCollision(
-                        surface=EnvironmentSurface.CEILING,
-                        ball_position=curr_ball_pos,
-                        ball_velocity_before=prev_ball_vel,
-                        ball_velocity_after=curr_ball_vel,
-                        ball_velocity_change=ball_vel_change,
-                        ball_impact_point=Vector3(
-                            curr_ball_pos.x, curr_ball_pos.y, ceiling_height
-                        ),
-                        wall_normal=ceiling_normal,
-                        impact_location=Vector3(
-                            curr_ball_pos.x, curr_ball_pos.y, ceiling_height
-                        ),
-                        impulse_magnitude=impulse_vec.magnitude(),
-                        impulse_vector=impulse_vec,
-                        confidence=1.0,
-                    )
-                )
-
-        # Side walls
-        if abs(curr_ball_pos.y) >= (
-            bounds["y"][1] - self.BALL_RADIUS - self.ENVIRONMENT_THRESHOLD
-        ):
-            side = 1 if curr_ball_pos.y > 0 else -1
-            wall_normal = Vector3(0, -side, 0)
-            wall_height = side * bounds["y"][1]
-
-            # Skip if ball is rolling along wall
-            if self.is_ball_rolling_on_surface(
-                Vector3(curr_ball_pos.x, curr_ball_pos.y, curr_ball_pos.z),
-                curr_ball_vel,
-                wall_normal,
-                wall_height,
-            ):
-                return collisions
-
-            # Check for bounce (velocity reversed in y direction)
-            if (ball_vel_change.y * -side) > 0 and (prev_ball_vel.y * side) > 0:
-                in_goal_x = (
-                    abs(curr_ball_pos.x) > bounds["x"][1] - self.arena.GOAL_DEPTH
-                )
-                in_goal_z = curr_ball_pos.z < self.arena.GOAL_HEIGHT
-
-                surface = (
-                    EnvironmentSurface.GOAL_WALL
-                    if (in_goal_x and in_goal_z)
-                    else EnvironmentSurface.SIDE_WALL
-                )
-                impulse_vec = ball_vel_change * self.ball_mass
-
-                collisions.append(
-                    BallEnvironmentCollision(
-                        surface=surface,
-                        ball_position=curr_ball_pos,
-                        ball_velocity_before=prev_ball_vel,
-                        ball_velocity_after=curr_ball_vel,
-                        ball_velocity_change=ball_vel_change,
-                        ball_impact_point=Vector3(
-                            curr_ball_pos.x, wall_height, curr_ball_pos.z
-                        ),
-                        wall_normal=wall_normal,
-                        impact_location=Vector3(
-                            curr_ball_pos.x, wall_height, curr_ball_pos.z
-                        ),
-                        impulse_magnitude=impulse_vec.magnitude(),
-                        impulse_vector=impulse_vec,
-                        confidence=0.9,
-                    )
-                )
-
-        # Back walls
-        if abs(curr_ball_pos.x) >= (
-            bounds["x"][1] - self.BALL_RADIUS - self.ENVIRONMENT_THRESHOLD
-        ):
-            side = 1 if curr_ball_pos.x > 0 else -1
-            wall_normal = Vector3(-side, 0, 0)
-            wall_height = side * bounds["x"][1]
-
-            # Skip if ball is rolling along wall
-            if self.is_ball_rolling_on_surface(
-                Vector3(curr_ball_pos.x, curr_ball_pos.y, curr_ball_pos.z),
-                curr_ball_vel,
-                wall_normal,
-                wall_height,
-            ):
-                return collisions
-
-            # Check for bounce (velocity reversed in x direction)
-            if (ball_vel_change.x * -side) > 0 and (prev_ball_vel.x * side) > 0:
-                in_goal_y = abs(curr_ball_pos.y) < self.arena.GOAL_WIDTH / 2
-                in_goal_z = curr_ball_pos.z < self.arena.GOAL_HEIGHT
-
-                surface = (
-                    EnvironmentSurface.GOAL_WALL
-                    if (in_goal_y and in_goal_z)
-                    else EnvironmentSurface.BACK_WALL
-                )
-                impulse_vec = ball_vel_change * self.ball_mass
-
-                collisions.append(
-                    BallEnvironmentCollision(
-                        surface=surface,
-                        ball_position=curr_ball_pos,
-                        ball_velocity_before=prev_ball_vel,
-                        ball_velocity_after=curr_ball_vel,
-                        ball_velocity_change=ball_vel_change,
-                        ball_impact_point=Vector3(
-                            wall_height, curr_ball_pos.y, curr_ball_pos.z
-                        ),
-                        wall_normal=wall_normal,
-                        impact_location=Vector3(
-                            wall_height, curr_ball_pos.y, curr_ball_pos.z
-                        ),
-                        impulse_magnitude=impulse_vec.magnitude(),
-                        impulse_vector=impulse_vec,
-                        confidence=0.9,
-                    )
-                )
-
-        return collisions
-
-    def detect_player_player_collisions(
-        self,
-        prev_players: Dict[str, Tuple[Vector3, Vector3, Quaternion]],
-        curr_players: Dict[str, Tuple[Vector3, Vector3, Quaternion]],
-    ) -> List[PlayerPlayerCollision]:
-        """Detect collisions between players."""
-        collisions: List[PlayerPlayerCollision] = []
-        player_names = list(curr_players.keys())
-
-        for i, name1 in enumerate(player_names):
-            for name2 in player_names[i + 1 :]:
-                if name1 not in prev_players or name2 not in prev_players:
-                    continue
-
-                curr_pos1, curr_vel1, _ = curr_players[name1]
-                curr_pos2, curr_vel2, _ = curr_players[name2]
-                prev_pos1, prev_vel1, _ = prev_players[name1]
-                prev_pos2, prev_vel2, _ = prev_players[name2]
-
-                distance = curr_pos1.distance_to(curr_pos2)
-
-                if distance > self.PLAYER_PLAYER_MAX_DISTANCE:
-                    continue
-
-                # Check for velocity changes indicating collision
-                vel_change1 = curr_vel1 - prev_vel1
-                vel_change2 = curr_vel2 - prev_vel2
-
-                if (
-                    vel_change1.magnitude() < self.PLAYER_VELOCITY_CHANGE_THRESHOLD
-                    and vel_change2.magnitude() < self.PLAYER_VELOCITY_CHANGE_THRESHOLD
-                ):
-                    continue
-
-                collision_normal = (curr_pos2 - curr_pos1).normalized()
-                relative_vel = (prev_vel1 - prev_vel2).magnitude()
-
-                confidence = 0.5
-                if distance < 100:
-                    confidence = 0.8
-                if distance < 75:
-                    confidence = 1.0
-
-                collisions.append(
-                    PlayerPlayerCollision(
-                        player1_name=name1,
-                        player2_name=name2,
-                        player1_position=curr_pos1,
-                        player1_velocity_before=prev_vel1,
-                        player1_velocity_after=curr_vel1,
-                        player1_impact_point=curr_pos1 + (collision_normal * 50),
-                        player2_position=curr_pos2,
-                        player2_velocity_before=prev_vel2,
-                        player2_velocity_after=curr_vel2,
-                        player2_impact_point=curr_pos2 - (collision_normal * 50),
-                        collision_normal=collision_normal,
-                        relative_velocity=relative_vel,
-                        confidence=confidence,
-                    )
-                )
-
-        return collisions
-
-    def is_player_driving_on_surface(
-        self,
-        player_rot: Quaternion,
-        surface_normal: Vector3,
-        player_vel: Vector3,
-    ) -> bool:
-        """
-        Check if a player is driving on a surface (controlled) vs impacting it.
-
-        A player is "driving" if their car's bottom/wheels are aligned with the surface.
-        """
-        car_up = player_rot.get_up_vector()
-
-        # Check alignment between car's up vector and surface normal
-        # If car is oriented with the surface, they're driving on it
-        alignment = car_up.dot(surface_normal)
-
-        # Alignment > 0.7 means car is roughly aligned with surface (within ~45 degrees)
-        # This indicates controlled driving, not a crash
-        return alignment > 0.7
-
-    def is_smooth_transition(
-        self,
-        prev_vel: Vector3,
-        curr_vel: Vector3,
-        surface_normal: Vector3,
-    ) -> bool:
-        """
-        Check if velocity change is a smooth transition (driving) vs impact (crash).
-
-        Smooth transitions have gradual velocity changes parallel to the surface.
-        Impacts have sudden velocity changes perpendicular to the surface.
-        """
-        vel_change = curr_vel - prev_vel
-
-        # Project velocity change onto surface normal
-        normal_component = abs(vel_change.dot(surface_normal))
-
-        # Project onto surface tangent (perpendicular to normal)
-        tangent_component = vel_change.magnitude()
-
-        # If most of the change is perpendicular to surface = impact
-        # If most of the change is parallel to surface = smooth driving
-        if tangent_component < 0.1:
-            return False
-
-        ratio = normal_component / tangent_component
-
-        # High ratio = mostly perpendicular change = impact
-        # Low ratio = mostly parallel change = smooth transition
-        return ratio < 0.5  # Less than 50% of change is perpendicular
-
-    def detect_player_environment_collisions(
-        self,
-        prev_players: Dict[str, Tuple[Vector3, Vector3, Quaternion]],
-        curr_players: Dict[str, Tuple[Vector3, Vector3, Quaternion]],
-    ) -> List[PlayerEnvironmentCollision]:
-        """Detect player collisions with environment (actual impacts, not driving transitions)."""
-        collisions: List[PlayerEnvironmentCollision] = []
-        bounds = self.arena.get_boundaries()
-
-        for name, (curr_pos, curr_vel, curr_rot) in curr_players.items():
-            if name not in prev_players:
-                continue
-
-            prev_pos, prev_vel, prev_rot = prev_players[name]
-            vel_change = curr_vel - prev_vel
-
-            if vel_change.magnitude() < self.PLAYER_VELOCITY_CHANGE_THRESHOLD:
-                continue
-
-            # Ground collision - must be falling (negative z velocity) and near ground
-            if curr_pos.z <= (20 + self.ENVIRONMENT_THRESHOLD):
-                ground_normal = Vector3(0, 0, 1)
-
-                # Check if player is already driving on ground (not an impact)
-                if self.is_player_driving_on_surface(curr_rot, ground_normal, curr_vel):
-                    continue  # Already driving on ground, not a landing
-
-                # Check if this is a smooth transition (driving from wall to ground)
-                if self.is_smooth_transition(prev_vel, curr_vel, ground_normal):
-                    continue  # Smooth transition, not an impact
-
-                # Check if player was falling before impact
-                if prev_vel.z < -100:  # Was moving downward with significant speed
-                    # Check if velocity changed (bounced/landed)
-                    if vel_change.z > 50:  # Velocity changed upward (landed/bounced)
-                        collisions.append(
-                            PlayerEnvironmentCollision(
-                                player_name=name,
-                                surface=EnvironmentSurface.GROUND,
-                                player_position=curr_pos,
-                                player_velocity_before=prev_vel,
-                                player_velocity_after=curr_vel,
-                                player_impact_surface="bottom",
-                                wall_normal=ground_normal,
-                                impact_location=Vector3(curr_pos.x, curr_pos.y, 0),
-                                confidence=0.9,
-                            )
-                        )
-
-            # Ceiling collision - must be rising (positive z velocity) and near ceiling
-            if curr_pos.z >= (bounds["z"][1] - 100):
-                ceiling_normal = Vector3(0, 0, -1)
-
-                # Check if driving on ceiling (not an impact)
-                if self.is_player_driving_on_surface(
-                    curr_rot, ceiling_normal, curr_vel
-                ):
-                    continue
-
-                if self.is_smooth_transition(prev_vel, curr_vel, ceiling_normal):
-                    continue
-
-                if prev_vel.z > 100:  # Was moving upward
-                    if vel_change.z < -50:  # Velocity changed downward
-                        collisions.append(
-                            PlayerEnvironmentCollision(
-                                player_name=name,
-                                surface=EnvironmentSurface.CEILING,
-                                player_position=curr_pos,
-                                player_velocity_before=prev_vel,
-                                player_velocity_after=curr_vel,
-                                player_impact_surface="roof",
-                                wall_normal=ceiling_normal,
-                                impact_location=Vector3(
-                                    curr_pos.x, curr_pos.y, bounds["z"][1]
-                                ),
-                                confidence=0.9,
-                            )
-                        )
-
-            # Side walls - must be moving toward the wall
-            if abs(curr_pos.y) >= (bounds["y"][1] - 100):
-                side = 1 if curr_pos.y > 0 else -1
-                wall_normal = Vector3(0, -side, 0)
-
-                # Check if driving on wall (not an impact)
-                if self.is_player_driving_on_surface(curr_rot, wall_normal, curr_vel):
-                    continue
-
-                if self.is_smooth_transition(prev_vel, curr_vel, wall_normal):
-                    continue
-
-                # Check if moving toward the wall (positive y-vel for positive side, negative for negative)
-                moving_toward_wall = (
-                    prev_vel.y * side
-                ) > 200  # Moving toward wall with speed
-                velocity_reversed = (
-                    vel_change.y * side
-                ) < -100  # Velocity reversed/reduced
-
-                if moving_toward_wall and velocity_reversed:
-                    collisions.append(
-                        PlayerEnvironmentCollision(
-                            player_name=name,
-                            surface=EnvironmentSurface.SIDE_WALL,
-                            player_position=curr_pos,
-                            player_velocity_before=prev_vel,
-                            player_velocity_after=curr_vel,
-                            player_impact_surface="side",
-                            wall_normal=wall_normal,
-                            impact_location=Vector3(
-                                curr_pos.x, side * bounds["y"][1], curr_pos.z
-                            ),
-                            confidence=0.8,
-                        )
-                    )
-
-            # Back walls - must be moving toward the wall
-            if abs(curr_pos.x) >= (bounds["x"][1] - 100):
-                side = 1 if curr_pos.x > 0 else -1
-                wall_normal = Vector3(-side, 0, 0)
-
-                # Check if driving on wall (not an impact)
-                if self.is_player_driving_on_surface(curr_rot, wall_normal, curr_vel):
-                    continue
-
-                if self.is_smooth_transition(prev_vel, curr_vel, wall_normal):
-                    continue
-
-                moving_toward_wall = (prev_vel.x * side) > 200
-                velocity_reversed = (vel_change.x * side) < -100
-
-                if moving_toward_wall and velocity_reversed:
-                    collisions.append(
-                        PlayerEnvironmentCollision(
-                            player_name=name,
-                            surface=EnvironmentSurface.BACK_WALL,
-                            player_position=curr_pos,
-                            player_velocity_before=prev_vel,
-                            player_velocity_after=curr_vel,
-                            player_impact_surface="front_or_back",
-                            wall_normal=wall_normal,
-                            impact_location=Vector3(
-                                side * bounds["x"][1], curr_pos.y, curr_pos.z
-                            ),
-                            confidence=0.8,
-                        )
-                    )
-
-        return collisions
-
-    def detect_all_collisions(
-        self,
-        prev_frame: Frame,
-        curr_frame: Frame,
+        prev_game: Game,
+        curr_game: Game,
+        player_name_map: Dict[str, int],
         frame_number: int,
-        player_hitboxes: Optional[Dict[str, str]] = None,
+        substep: int,
     ) -> FrameCollisions:
         """
-        Detect ALL collisions that occurred between two frames.
+        Detect collisions by comparing two game states.
 
-        Returns a FrameCollisions object containing all detected collisions.
+        Args:
+            prev_game: Game state before step
+            curr_game: Game state after step
+            player_name_map: Map of player names to car indices
+            frame_number: Current frame number
+            substep: Current substep within frame
         """
-        prev_ball, prev_players = self.parse_frame(prev_frame)
-        curr_ball, curr_players = self.parse_frame(curr_frame)
+        collisions = FrameCollisions(frame_number=frame_number)
 
-        frame_collisions = FrameCollisions(frame_number=frame_number)
+        # Check ball-player collisions
+        for name, idx in player_name_map.items():
+            car = curr_game.cars[idx]
+            prev_car = prev_game.cars[idx]
+            ball_center = curr_game.ball.position
+            closest_point = closest_point_on_hitbox(car, ball_center)
+            distance = Vector3.from_vec3(closest_point - ball_center).magnitude()
 
-        # Detect ball-player collisions
-        frame_collisions.ball_player_collisions = self.detect_ball_player_collisions(
-            prev_ball, curr_ball, prev_players, curr_players, player_hitboxes
+            will_collide = distance <= curr_game.ball.collision_radius
+
+            if will_collide:
+                collision_values = compute_collision(
+                    ball=prev_game.ball,
+                    player=prev_car,
+                )
+                collision = BallPlayerCollision(
+                    player_name=name,
+                    frame_number=frame_number,
+                    substep=substep,
+                    ball_velocity=Vector3.from_vec3(collision_values["ball_velocity"]),
+                    player_velocity=Vector3.from_vec3(
+                        collision_values["player_velocity"]
+                    ),
+                    ball_contact_point=Vector3.from_vec3(
+                        collision_values["ball_contact_point"]
+                    ),
+                    player_contact_point=Vector3.from_vec3(
+                        collision_values["player_contact_point"]
+                    ),
+                    impulse=Vector3.from_vec3(collision_values["impulse"]),
+                    collision_normal=Vector3.from_vec3(
+                        collision_values["collision_normal"]
+                    ),
+                    player_collision_region=collision_values["player_collision_region"],
+                )
+                collisions.ball_player_collisions.append(collision)
+
+        # Check ball-environment collisions
+        env_collision = self._detect_ball_environment_collision(
+            prev_game.ball, curr_game.ball, frame_number, substep
         )
+        if env_collision:
+            collisions.ball_environment_collisions.append(env_collision)
 
-        # Detect ball-environment collisions
-        frame_collisions.ball_environment_collisions = (
-            self.detect_ball_environment_collisions(prev_ball, curr_ball)
-        )
+        # Detect player collisions
+        for name, idx in player_name_map.items():
+            if idx >= len(curr_game.cars):
+                continue
 
-        # Detect player-player collisions
-        frame_collisions.player_player_collisions = (
-            self.detect_player_player_collisions(prev_players, curr_players)
-        )
+            car = curr_game.cars[idx]
+            prev_car = prev_game.cars[idx]
 
-        # Detect player-environment collisions
-        frame_collisions.player_environment_collisions = (
-            self.detect_player_environment_collisions(prev_players, curr_players)
-        )
+            car_vel_change = Vector3.from_vec3(car.velocity) - Vector3.from_vec3(
+                prev_car.velocity
+            )
 
-        return frame_collisions
+            if car_vel_change.magnitude() > self.PLAYER_VELOCITY_THRESHOLD:
+                # Check player-player collisions
+                for other_name, other_idx in player_name_map.items():
+                    if other_name == name or other_idx >= len(curr_game.cars):
+                        continue
+
+                    other_car = curr_game.cars[other_idx]
+                    distance = Vector3.from_vec3(car.position).distance_to(
+                        Vector3.from_vec3(other_car.position)
+                    )
+
+                    if distance < self.COLLISION_DISTANCE_THRESHOLD:
+                        collision = PlayerPlayerCollision(
+                            player1_name=name,
+                            player2_name=other_name,
+                            frame_number=frame_number,
+                            substep=substep,
+                            player1_position=Vector3.from_vec3(car.position),
+                            player1_velocity_before=Vector3.from_vec3(
+                                prev_car.velocity
+                            ),
+                            player1_velocity_after=Vector3.from_vec3(car.velocity),
+                            player2_position=Vector3.from_vec3(other_car.position),
+                            player2_velocity_before=Vector3.from_vec3(
+                                prev_game.cars[other_idx].velocity
+                            ),
+                            player2_velocity_after=Vector3.from_vec3(
+                                other_car.velocity
+                            ),
+                            collision_normal=car_vel_change.normalized(),
+                            relative_velocity=car_vel_change.magnitude(),
+                        )
+                        collisions.player_player_collisions.append(collision)
+
+                # Check player-environment collisions
+                env_collision = self._detect_player_environment_collision(
+                    prev_car, car, name, frame_number, substep
+                )
+                if env_collision:
+                    collisions.player_environment_collisions.append(env_collision)
+
+        return collisions
+
+    def _detect_ball_environment_collision(
+        self,
+        prev_ball: Ball,
+        curr_ball: Ball,
+        frame_number: int,
+        substep: int,
+    ) -> Optional[BallEnvironmentCollision]:
+        """Detect if ball collided with environment."""
+        pos = Vector3.from_vec3(curr_ball.position)
+        prev_vel = Vector3.from_vec3(prev_ball.velocity)
+        curr_vel = Vector3.from_vec3(curr_ball.velocity)
+        vel_change = curr_vel - prev_vel
+
+        # Ground
+        if pos.z <= self.BALL_RADIUS + 10 and vel_change.z > 0:
+            return BallEnvironmentCollision(
+                surface=EnvironmentSurface.GROUND,
+                frame_number=frame_number,
+                substep=substep,
+                ball_position=pos,
+                ball_velocity_before=prev_vel,
+                ball_velocity_after=curr_vel,
+                ball_velocity_change=vel_change,
+                wall_normal=Vector3(0, 0, 1),
+                impulse_magnitude=vel_change.magnitude() * self.BALL_MASS,
+            )
+
+        # Ceiling (z = 2044)
+        if pos.z >= 2044 - self.BALL_RADIUS - 10 and vel_change.z < 0:
+            return BallEnvironmentCollision(
+                surface=EnvironmentSurface.CEILING,
+                frame_number=frame_number,
+                substep=substep,
+                ball_position=pos,
+                ball_velocity_before=prev_vel,
+                ball_velocity_after=curr_vel,
+                ball_velocity_change=vel_change,
+                wall_normal=Vector3(0, 0, -1),
+                impulse_magnitude=vel_change.magnitude() * self.BALL_MASS,
+            )
+
+        # Side walls (y = ±4096)
+        if abs(pos.y) >= 4096 - self.BALL_RADIUS - 10:
+            side = 1 if pos.y > 0 else -1
+            if vel_change.y * -side > 0:
+                return BallEnvironmentCollision(
+                    surface=EnvironmentSurface.SIDE_WALL,
+                    frame_number=frame_number,
+                    substep=substep,
+                    ball_position=pos,
+                    ball_velocity_before=prev_vel,
+                    ball_velocity_after=curr_vel,
+                    ball_velocity_change=vel_change,
+                    wall_normal=Vector3(0, -side, 0),
+                    impulse_magnitude=vel_change.magnitude() * self.BALL_MASS,
+                )
+
+        # Back walls (x = ±5120)
+        if abs(pos.x) >= 5120 - self.BALL_RADIUS - 10:
+            side = 1 if pos.x > 0 else -1
+            if vel_change.x * -side > 0:
+                return BallEnvironmentCollision(
+                    surface=EnvironmentSurface.BACK_WALL,
+                    frame_number=frame_number,
+                    substep=substep,
+                    ball_position=pos,
+                    ball_velocity_before=prev_vel,
+                    ball_velocity_after=curr_vel,
+                    ball_velocity_change=vel_change,
+                    wall_normal=Vector3(-side, 0, 0),
+                    impulse_magnitude=vel_change.magnitude() * self.BALL_MASS,
+                )
+
+        return None
+
+    def _detect_player_environment_collision(
+        self,
+        prev_car: Car,
+        curr_car: Car,
+        player_name: str,
+        frame_number: int,
+        substep: int,
+    ) -> Optional[PlayerEnvironmentCollision]:
+        """Detect if player collided with environment."""
+        pos = Vector3.from_vec3(curr_car.position)
+        prev_vel = Vector3.from_vec3(prev_car.velocity)
+        curr_vel = Vector3.from_vec3(curr_car.velocity)
+        vel_change = curr_vel - prev_vel
+
+        # Only detect significant impacts
+        if vel_change.magnitude() < self.PLAYER_VELOCITY_THRESHOLD:
+            return None
+
+        # Check if on_ground changed (landed or took off)
+        if not prev_car.on_ground and curr_car.on_ground:
+            return PlayerEnvironmentCollision(
+                player_name=player_name,
+                surface=EnvironmentSurface.GROUND,
+                frame_number=frame_number,
+                substep=substep,
+                player_position=pos,
+                player_velocity_before=prev_vel,
+                player_velocity_after=curr_vel,
+                wall_normal=Vector3(0, 0, 1),
+            )
+
+        # Check walls based on position and velocity change
+        if abs(pos.y) >= 4096 - 100:
+            side = 1 if pos.y > 0 else -1
+            if vel_change.y * -side > 0:
+                return PlayerEnvironmentCollision(
+                    player_name=player_name,
+                    surface=EnvironmentSurface.SIDE_WALL,
+                    frame_number=frame_number,
+                    substep=substep,
+                    player_position=pos,
+                    player_velocity_before=prev_vel,
+                    player_velocity_after=curr_vel,
+                    wall_normal=Vector3(0, -side, 0),
+                )
+
+        if abs(pos.x) >= 5120 - 100:
+            side = 1 if pos.x > 0 else -1
+            if vel_change.x * -side > 0:
+                return PlayerEnvironmentCollision(
+                    player_name=player_name,
+                    surface=EnvironmentSurface.BACK_WALL,
+                    frame_number=frame_number,
+                    substep=substep,
+                    player_position=pos,
+                    player_velocity_before=prev_vel,
+                    player_velocity_after=curr_vel,
+                    wall_normal=Vector3(-side, 0, 0),
+                )
+
+        return None
+
+    def detect_collisions_in_frame(
+        self,
+        frame: Frame,
+        previous_frame: Frame,
+        frame_number: int,
+    ) -> List[FrameCollisions]:
+        """
+        Detect all collisions that occur during a frame by simulating it with substeps.
+
+        Args:
+            frame: Starting frame state
+            frame_number: Frame number for tracking
+
+        Returns:
+            List of FrameCollisions, one for each substep that had collisions
+        """
+        game, player_map = self.frame_to_game_state(frame)
+        prev_game, _ = self.frame_to_game_state(previous_frame)
+
+        all_collisions: List[FrameCollisions] = []
+
+        max_substeps = 30  # arbitrary upper bound
+        substep_count = 0
+
+        prev_game = self._copy_game_state(game)
+
+        if frame_number == 171:
+            pass
+
+        while substep_count < max_substeps:
+            dt = self.substep_dt
+
+            # Step simulation
+            game.ball.step(dt)
+            for car in game.cars:
+                car.step(controls=car.controls, dt=dt)
+
+            # Detect collisions between previous and current step
+            collisions = self.detect_collisions_between_states(
+                prev_game, game, player_map, frame_number, substep_count
+            )
+            if collisions.has_collisions():
+                all_collisions.append(collisions)
+                for collision in collisions.ball_player_collisions:
+                    ball = game.ball
+                    car = game.cars[player_map[collision.player_name]]
+
+                    # Apply the new velocities
+                    ball.velocity = collision.ball_velocity.to_vec3()
+                    car.velocity = collision.player_velocity.to_vec3()
+
+                    # Optionally: update positions to the moment of impact (if your collision object provides contact_point)
+                    ball.position = (
+                        collision.ball_contact_point.to_vec3()
+                        + collision.collision_normal.to_vec3() * ball.collision_radius
+                    )
+
+            # Update for next substep
+            prev_game = self._copy_game_state(game)
+            substep_count += 1
+
+            # Vector from car to ball
+            to_ball = game.ball.position - car.position  # vec3
+
+            # Unit vector in the direction of the car's velocity
+            if norm(car.velocity) > 0:
+                car_dir = car.velocity / norm(car.velocity)  # normalize velocity
+            else:
+                car_dir = vec3(0, 0, 0)  # car is stationary
+
+            # Distance along the velocity direction
+            distance_along_velocity = dot(to_ball, car_dir)
+
+            # Compute car hitbox half-diagonal (approximate radius of OBB)
+            car_half_diagonal = norm(car.hitbox_widths)
+
+            # Relative speed along that direction
+            speed_along_direction = dot(car.velocity, car_dir)  # scalar
+
+            # Avoid division by zero
+            if speed_along_direction > 0:
+                # Time until potential contact
+                time_to_contact = (
+                    distance_along_velocity
+                    - game.ball.collision_radius
+                    - car_half_diagonal
+                ) / speed_along_direction
+            else:
+                time_to_contact = float("inf")  # car not moving toward ball
+            if time_to_contact > 1:
+                break
+
+        return all_collisions
+
+    def _copy_game_state(self, game: Game) -> Game:
+        """Create a copy of game state for comparison."""
+        new_game = Game()
+
+        # Copy ball
+        new_game.ball.position = vec3(game.ball.position)
+        new_game.ball.velocity = vec3(game.ball.velocity)
+        new_game.ball.angular_velocity = vec3(game.ball.angular_velocity)
+
+        # Copy cars
+        cars = []
+        for car in game.cars:
+            new_car = Car()
+            new_car.position = vec3(car.position)
+            new_car.velocity = vec3(car.velocity)
+            new_car.angular_velocity = vec3(car.angular_velocity)
+            new_car.orientation = car.orientation
+            new_car.on_ground = car.on_ground
+            cars.append(new_car)
+        new_game.cars = cars
+
+        return new_game
 
     def get_collision_summary(self, frame_collisions: FrameCollisions) -> str:
-        """Generate a summary report of all collisions in a frame."""
+        """Generate a summary report of collisions."""
         lines = [
             f"=" * 70,
             f"FRAME {frame_collisions.frame_number} COLLISION SUMMARY",
             f"=" * 70,
-            f"Total collisions detected: {len(frame_collisions.get_all_collisions())}",
+            f"Total collisions: {len(frame_collisions.get_all_collisions())}",
             "",
         ]
 
         if frame_collisions.ball_player_collisions:
-            lines.append(
-                f"Ball-Player Collisions: {len(frame_collisions.ball_player_collisions)}"
-            )
-            for i, col in enumerate(frame_collisions.ball_player_collisions, 1):
-                lines.extend(
-                    [
-                        f"  [{i}] {col.player_name} (confidence: {col.confidence:.2f})",
-                        f"      Surface: {col.car_impact_surface}",
-                        f"      Ball Δv: {col.ball_velocity_change.magnitude():.1f} uu/s",
-                        f"      Impulse: {col.impulse_magnitude:.1f} mass·uu/s",
-                    ]
+            lines.append(f"Ball-Player: {len(frame_collisions.ball_player_collisions)}")
+            for col in frame_collisions.ball_player_collisions:
+                lines.append(
+                    f"  [{col.substep:3d}] {col.player_name}: "
+                    f"Δv={col.ball_velocity_change.magnitude():.1f} uu/s"
                 )
-            lines.append("")
 
         if frame_collisions.ball_environment_collisions:
             lines.append(
-                f"Ball-Environment Collisions: {len(frame_collisions.ball_environment_collisions)}"
+                f"Ball-Environment: {len(frame_collisions.ball_environment_collisions)}"
             )
-            for i, col in enumerate(frame_collisions.ball_environment_collisions, 1):
-                lines.extend(
-                    [
-                        f"  [{i}] {col.surface.value.upper()} (confidence: {col.confidence:.2f})",
-                        f"      Ball Δv: {col.ball_velocity_change.magnitude():.1f} uu/s",
-                        f"      Normal: {col.wall_normal}",
-                    ]
-                )
-            lines.append("")
+            for col in frame_collisions.ball_environment_collisions:
+                lines.append(f"  [{col.substep:3d}] {col.surface.value}")
 
         if frame_collisions.player_player_collisions:
             lines.append(
-                f"Player-Player Collisions: {len(frame_collisions.player_player_collisions)}"
+                f"Player-Player: {len(frame_collisions.player_player_collisions)}"
             )
-            for i, col in enumerate(frame_collisions.player_player_collisions, 1):
-                lines.extend(
-                    [
-                        f"  [{i}] {col.player1_name} vs {col.player2_name} (confidence: {col.confidence:.2f})",
-                        f"      Relative velocity: {col.relative_velocity:.1f} uu/s",
-                    ]
+            for col in frame_collisions.player_player_collisions:
+                lines.append(
+                    f"  [{col.substep:3d}] {col.player1_name} vs {col.player2_name}"
                 )
-            lines.append("")
 
         if frame_collisions.player_environment_collisions:
             lines.append(
-                f"Player-Environment Collisions: {len(frame_collisions.player_environment_collisions)}"
+                f"Player-Environment: {len(frame_collisions.player_environment_collisions)}"
             )
-            for i, col in enumerate(frame_collisions.player_environment_collisions, 1):
-                lines.extend(
-                    [
-                        f"  [{i}] {col.player_name} -> {col.surface.value.upper()} (confidence: {col.confidence:.2f})",
-                    ]
+            for col in frame_collisions.player_environment_collisions:
+                lines.append(
+                    f"  [{col.substep:3d}] {col.player_name} -> {col.surface.value}"
                 )
-            lines.append("")
-
-        return "\n".join(lines)
-
-    def get_detailed_collision_report(self, collision: CollisionEvent) -> str:
-        """Generate a detailed report for a single collision."""
-        lines = ["=" * 70]
-
-        if isinstance(collision, BallPlayerCollision):
-            lines.extend(
-                [
-                    "BALL-PLAYER COLLISION",
-                    "=" * 70,
-                    f"Player: {collision.player_name}",
-                    f"Confidence: {collision.confidence:.2f}",
-                    "",
-                    "Ball Impact:",
-                    f"  Position: {collision.ball_position}",
-                    f"  Impact Point: {collision.ball_impact_point}",
-                    f"  Velocity Before: {collision.ball_velocity_before}",
-                    f"  Velocity After: {collision.ball_velocity_after}",
-                    f"  Velocity Change: {collision.ball_velocity_change}",
-                    f"  Speed Change: {collision.ball_velocity_change.magnitude():.1f} uu/s",
-                    "",
-                    "Car Impact:",
-                    f"  Position: {collision.player_position}",
-                    f"  Impact Point: {collision.car_impact_point}",
-                    f"  Impact Surface: {collision.car_impact_surface}",
-                    "",
-                    "Physics:",
-                    f"  Collision Normal: {collision.collision_normal}",
-                    f"  Impulse Magnitude: {collision.impulse_magnitude:.1f} mass·uu/s",
-                    f"  Impulse Vector: {collision.impulse_vector}",
-                ]
-            )
-
-        elif isinstance(collision, BallEnvironmentCollision):
-            lines.extend(
-                [
-                    "BALL-ENVIRONMENT COLLISION",
-                    "=" * 70,
-                    f"Surface: {collision.surface.value.upper()}",
-                    f"Confidence: {collision.confidence:.2f}",
-                    "",
-                    "Ball Impact:",
-                    f"  Position: {collision.ball_position}",
-                    f"  Impact Point: {collision.ball_impact_point}",
-                    f"  Velocity Before: {collision.ball_velocity_before}",
-                    f"  Velocity After: {collision.ball_velocity_after}",
-                    f"  Velocity Change: {collision.ball_velocity_change}",
-                    f"  Speed Change: {collision.ball_velocity_change.magnitude():.1f} uu/s",
-                    "",
-                    "Environment:",
-                    f"  Wall Normal: {collision.wall_normal}",
-                    f"  Impact Location: {collision.impact_location}",
-                    f"  Impulse: {collision.impulse_magnitude:.1f} mass·uu/s",
-                ]
-            )
-
-        elif isinstance(collision, PlayerPlayerCollision):
-            lines.extend(
-                [
-                    "PLAYER-PLAYER COLLISION",
-                    "=" * 70,
-                    f"Players: {collision.player1_name} vs {collision.player2_name}",
-                    f"Confidence: {collision.confidence:.2f}",
-                    "",
-                    f"Player 1 ({collision.player1_name}):",
-                    f"  Position: {collision.player1_position}",
-                    f"  Velocity Before: {collision.player1_velocity_before}",
-                    f"  Velocity After: {collision.player1_velocity_after}",
-                    "",
-                    f"Player 2 ({collision.player2_name}):",
-                    f"  Position: {collision.player2_position}",
-                    f"  Velocity Before: {collision.player2_velocity_before}",
-                    f"  Velocity After: {collision.player2_velocity_after}",
-                    "",
-                    "Physics:",
-                    f"  Collision Normal: {collision.collision_normal}",
-                    f"  Relative Velocity: {collision.relative_velocity:.1f} uu/s",
-                ]
-            )
-
-        else:
-            lines.extend(
-                [
-                    "PLAYER-ENVIRONMENT COLLISION",
-                    "=" * 70,
-                    f"Player: {collision.player_name}",
-                    f"Surface: {collision.surface.value.upper()}",
-                    f"Confidence: {collision.confidence:.2f}",
-                    "",
-                    "Player Impact:",
-                    f"  Position: {collision.player_position}",
-                    f"  Impact Surface: {collision.player_impact_surface}",
-                    f"  Velocity Before: {collision.player_velocity_before}",
-                    f"  Velocity After: {collision.player_velocity_after}",
-                    "",
-                    "Environment:",
-                    f"  Wall Normal: {collision.wall_normal}",
-                    f"  Impact Location: {collision.impact_location}",
-                ]
-            )
 
         return "\n".join(lines)

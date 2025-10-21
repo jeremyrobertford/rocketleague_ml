@@ -110,6 +110,11 @@ def get_dependent_distancing_cols(game: pd.DataFrame, teams: Dict[str, List[str]
                 game[f"{player}_distance_to_ball"] > 4000
             )
 
+            # TODO: Calculate alignment with current closest_to_the_ball car trajectory
+            # TODO: Adjust for both current cars' speed / possible hit strength
+            # TODO: Calculate alignment with current ball trajectory
+            # TODO: Adjust for current ball speed
+
             for p in players:
                 if p == player:
                     continue

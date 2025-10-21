@@ -215,7 +215,25 @@ def process_steer(
     car.steer.update_amount(car_component)
     if processor.include_movement:
         frame.processed_fields[car.player.name + "_steering"] = car_component.amount
-    # TODO: sharp_turns, full_turns, slight_turns
+    return None
+
+
+def process_throttle(
+    processor: Frame_By_Frame_Processor, updated_actor: Actor, frame: Frame
+):
+    car = frame.game.cars.get(updated_actor.actor_id)
+    if not car:
+        frame.add_updated_actor_to_disconnected_car_component_updates(updated_actor)
+        return None
+    attribute = updated_actor.attribute
+    if attribute is None or "Byte" not in attribute:
+        raise ValueError(f"Car throttle does not have attribute {updated_actor.raw}")
+    car_component = Simple_Car_Component(updated_actor, car)
+    if not car.throttle:
+        car.throttle = car_component
+    car.throttle.update_amount(car_component)
+    if processor.include_movement:
+        frame.processed_fields[car.player.name + "_throttle"] = car_component.amount
     return None
 
 
@@ -245,10 +263,7 @@ def process_car_component(
     car_component = frame.game.car_components.get(updated_actor.actor_id)
     car = frame.game.cars.get(updated_actor.actor_id)
     if updated_actor.secondary_category in [
-        "throttle",
-        "handbrake",
         "driving",
-        "component_usage_in_air",
     ]:
         return None
 

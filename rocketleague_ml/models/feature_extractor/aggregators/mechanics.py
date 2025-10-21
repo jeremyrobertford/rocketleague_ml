@@ -76,6 +76,8 @@ def aggregate_mechanics(game: pd.DataFrame, main_player: str) -> Dict[str, float
         features[f"Time while {label}"] = perc
         features[f"Average Stint while {label}"] = avg_stint
 
+    # TODO: sharp_turns, full_turns, slight_turns
+
     return (
         features
         | dodge_features

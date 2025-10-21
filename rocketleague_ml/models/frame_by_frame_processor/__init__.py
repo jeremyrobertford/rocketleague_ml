@@ -3,6 +3,7 @@ import math
 import pandas as pd
 from pathlib import Path
 from typing import Any, Dict, List, TypedDict
+from rlutilities.simulation import Game as SimGame  # type: ignore
 from rocketleague_ml.config import PREPROCESSED, PROCESSED, WRANGLED, ROUND_LENGTH
 from rocketleague_ml.core.actor import Actor
 from rocketleague_ml.core.game import Game
@@ -38,6 +39,7 @@ class Frame_By_Frame_Processor:
         include_custom_scoreboard_metrics: bool = False,
         include_mechanics: bool = False,
     ):
+        SimGame.set_mode("soccar")  # type: ignore
         self.include_advanced_vision: bool = include_advanced_vision
         self.include_movement: bool = include_movement
         self.config(
@@ -386,85 +388,87 @@ class Frame_By_Frame_Processor:
             or self.include_player_collisions
         )
         if frame.active and include_collision:
-            collisions = collision_detector.detect_all_collisions(
-                prev_frame=frame.game.previous_frame,
-                curr_frame=frame,
+            collisions = collision_detector.detect_collisions_in_frame(
+                frame=frame,
+                previous_frame=game.previous_frame,
                 frame_number=f,
             )
-            if self.include_ball_collisions:
-                field_label = "ball_hit"
-                for collision in collisions.ball_environment_collisions:
-                    frame.processed_fields[field_label + "_ball_impact_x"] = (
-                        collision.ball_impact_point.x
-                    )
-                    frame.processed_fields[field_label + "_ball_impact_y"] = (
-                        collision.ball_impact_point.y
-                    )
-                    frame.processed_fields[field_label + "_ball_impact_z"] = (
-                        collision.ball_impact_point.z
-                    )
-                    frame.processed_fields[
-                        field_label + "_ball_collision_confidence"
-                    ] = collision.confidence
-                    frame.processed_fields[field_label + "_ball_impulse_x"] = (
-                        collision.impulse_vector.x
-                    )
-                    frame.processed_fields[field_label + "_ball_impulse_y"] = (
-                        collision.impulse_vector.y
-                    )
-                    frame.processed_fields[field_label + "_ball_impulse_z"] = (
-                        collision.impulse_vector.z
-                    )
-            if self.include_player_collisions:
-                for collision in collisions.player_environment_collisions:
-                    pass
-            if self.include_ball_collisions and self.include_car_positioning:
-                for collision in collisions.ball_player_collisions:
-                    field_label = f"{collision.player_name}_hit_ball"
-                    frame.processed_fields[field_label + "_ball_impact_x"] = (
-                        collision.ball_impact_point.x
-                    )
-                    frame.processed_fields[field_label + "_ball_impact_y"] = (
-                        collision.ball_impact_point.y
-                    )
-                    frame.processed_fields[field_label + "_ball_impact_z"] = (
-                        collision.ball_impact_point.z
-                    )
-                    frame.processed_fields[field_label + "_car_impact_x"] = (
-                        collision.car_impact_point.x
-                    )
-                    frame.processed_fields[field_label + "_car_impact_y"] = (
-                        collision.car_impact_point.y
-                    )
-                    frame.processed_fields[field_label + "_car_impact_z"] = (
-                        collision.car_impact_point.z
-                    )
-                    frame.processed_fields[field_label + "_collision_normal_x"] = (
-                        collision.collision_normal.x
-                    )
-                    frame.processed_fields[field_label + "_collision_normal_y"] = (
-                        collision.collision_normal.y
-                    )
-                    frame.processed_fields[field_label + "_collision_normal_z"] = (
-                        collision.collision_normal.z
-                    )
-                    frame.processed_fields[field_label + "_collision_confidence"] = (
-                        collision.confidence
-                    )
-                    frame.processed_fields[field_label + "_impulse_x"] = (
-                        collision.impulse_vector.x
-                    )
-                    frame.processed_fields[field_label + "_impulse_y"] = (
-                        collision.impulse_vector.y
-                    )
-                    frame.processed_fields[field_label + "_impulse_z"] = (
-                        collision.impulse_vector.z
-                    )
-                pass
-            if self.include_player_collisions:
-                for collision in collisions.player_player_collisions:
-                    pass
-
+            ball_player_collisions: Dict[str, Any] = {}
+            for collision in collisions:
+                for ball_player_collision in collision.ball_player_collisions:
+                    player_name = ball_player_collision.player_name
+                    field_label = f"{player_name}_hit_ball"
+                    if player_name not in ball_player_collisions:
+                        ball_player_collisions[player_name] = {}
+                        ball_player_collisions[player_name][
+                            field_label + "_total_impulse_x"
+                        ] = 0
+                        ball_player_collisions[player_name][
+                            field_label + "_total_impulse_y"
+                        ] = 0
+                        ball_player_collisions[player_name][
+                            field_label + "_total_impulse_z"
+                        ] = 0
+                        ball_player_collisions[player_name][
+                            field_label + "_total_touches"
+                        ] = 0
+                        ball_player_collisions[player_name][
+                            field_label + "_total_contact_time"
+                        ] = 0
+                        field_label += "_first_contact"
+                        ball_player_collisions[player_name][
+                            field_label + "_car_collision_region"
+                        ] = ball_player_collision.player_collision_region
+                        ball_player_collisions[player_name][
+                            field_label + "_linear_velocity_x"
+                        ] = ball_player_collision.ball_velocity.x
+                        ball_player_collisions[player_name][
+                            field_label + "_linear_velocity_y"
+                        ] = ball_player_collision.ball_velocity.y
+                        ball_player_collisions[player_name][
+                            field_label + "_linear_velocity_z"
+                        ] = ball_player_collision.ball_velocity.z
+                        ball_player_collisions[player_name][
+                            field_label + "_impulse_x"
+                        ] = ball_player_collision.collision_normal.x
+                        ball_player_collisions[player_name][
+                            field_label + "_impulse_y"
+                        ] = ball_player_collision.collision_normal.y
+                        ball_player_collisions[player_name][
+                            field_label + "_impulse_z"
+                        ] = ball_player_collision.collision_normal.z
+                        ball_player_collisions[player_name][
+                            field_label + "_collision_normal_x"
+                        ] = ball_player_collision.collision_normal.x
+                        ball_player_collisions[player_name][
+                            field_label + "_collision_normal_y"
+                        ] = ball_player_collision.collision_normal.y
+                        ball_player_collisions[player_name][
+                            field_label + "_collision_normal_z"
+                        ] = ball_player_collision.collision_normal.z
+                    else:
+                        ball_player_collisions[player_name][
+                            field_label + "_total_impulse_x"
+                        ] += ball_player_collision.impulse.x
+                        ball_player_collisions[player_name][
+                            field_label + "_total_impulse_y"
+                        ] += ball_player_collision.impulse.y
+                        ball_player_collisions[player_name][
+                            field_label + "_total_impulse_z"
+                        ] += ball_player_collision.impulse.z
+                        ball_player_collisions[player_name][
+                            field_label + "_total_touches"
+                        ] += 1
+                        ball_player_collisions[player_name][
+                            field_label + "_total_contact_time"
+                        ] += (1 / 120)
+            for (
+                player_name,
+                ball_player_collision_fields,
+            ) in ball_player_collisions.items():
+                frame.processed_fields = (
+                    frame.processed_fields | ball_player_collision_fields
+                )
         return frame
 
     def process_game(self, game_data: Raw_Game_Data) -> List[Dict[str, Any]]:

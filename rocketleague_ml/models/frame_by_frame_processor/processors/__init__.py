@@ -10,6 +10,8 @@ from rocketleague_ml.models.frame_by_frame_processor.processors.car_components i
     process_component_usage_in_air,
     process_boost_pickup,
     process_demo,
+    process_activate_handbrake,
+    process_throttle,
 )
 from rocketleague_ml.models.frame_by_frame_processor.processors.camera_settings import (
     process_camera_settings,
@@ -51,7 +53,8 @@ processors: Dict[str, Callable[[Frame_By_Frame_Processor, Actor, Frame], None]] 
     "car_component.rep_boost": process_boost,
     "car_component.activate_boost": process_activate_component,
     "car_component.steer": process_steer,
-    "car_component.activate_handbrake": process_activate_component,
+    "car_component.throttle": process_throttle,
+    "car_component.activate_handbrake": process_activate_handbrake,
     "car_component": process_car_component,
     "player_component.team": process_player_team,
     "game_start_event": process_game_start,

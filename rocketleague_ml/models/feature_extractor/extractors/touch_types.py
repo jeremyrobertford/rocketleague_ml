@@ -149,4 +149,6 @@ def get_touch_type_cols(game: pd.DataFrame, teams: Dict[str, List[str]]):
                     (mask & touch_mask).astype(int), index=game.index  # type: ignore
                 )
 
+            # TODO: Calculate hit strength alignment with distance from ball
+
     return touch_type_cols

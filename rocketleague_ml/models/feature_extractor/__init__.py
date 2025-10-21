@@ -197,8 +197,6 @@ class Rocket_League_Feature_Extractor:
         game: pd.DataFrame,
         main_player: str,
         teams: Dict[str, List[str]],
-        column_label: str = "",
-        filter_label: str = "",
         config: Config | None = None,
     ) -> Dict[str, float]:
         game = game.copy()

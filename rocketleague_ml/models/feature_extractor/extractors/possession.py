@@ -8,9 +8,7 @@ def calculate_distances(
     vx: np.float64,
     vy: np.float64,
     yaw: np.float64,
-    base_forward_distance: float = 600,
-    base_backward_distance: float = 400,
-    velocity_scale: float = 1000,
+    yaw_at_jump: np.float64 | None,
 ) -> Tuple[np.float64, np.float64]:
     # World velocity
     vel_world = np.array([vx, vy])
@@ -33,7 +31,41 @@ def calculate_distances(
     else:
         forward_distance = np.interp(forward_speed, [0, 2300], [400, 1000])  # type: ignore
 
-    backward_distance = np.interp(forward_speed, [-1400, 2300], [600, 0])  # type: ignore
+    backward_distance = np.interp(forward_speed, [-1400, 1400], [600, 0])  # type: ignore
+
+    if yaw_at_jump:
+        backward_distance = np.interp(forward_speed, [-2300, 0, 2300], [1000, 400, 1000])  # type: ignore
+        return forward_distance, backward_distance  # type: ignore
+
+        # Rotation matrix for yaw
+        at_jump_rot_matrix = np.array(  # type: ignore
+            [
+                [
+                    np.cos(yaw_at_jump),
+                    np.sin(yaw_at_jump),
+                ],  # forward direction # type: ignore
+                [
+                    -np.sin(yaw_at_jump),
+                    np.cos(yaw_at_jump),
+                ],  # right direction # type: ignore
+            ]
+        )
+
+        # Convert world velocity into local car space
+        aerial_vel_local = at_jump_rot_matrix @ vel_world  # type: ignore
+
+        aerial_forward_speed = np.clip(
+            aerial_vel_local[0], -2300, 2300
+        )  # +forward, -backward
+
+        if aerial_forward_speed < 0:
+            jump_forward_distance = np.interp(aerial_forward_speed, [-1400, 0], [0, 400])  # type: ignore
+        else:
+            jump_forward_distance = np.interp(aerial_forward_speed, [0, 2300], [400, 1000])  # type: ignore
+        jump_backward_distance = np.interp(aerial_forward_speed, [-2300, 2300], [1000, 400])  # type: ignore
+
+        forward_distance = max(forward_distance, jump_forward_distance, 500)  # type: ignore
+        backward_distance = max(backward_distance, jump_backward_distance, 500)  # type: ignore
 
     return forward_distance, backward_distance  # type: ignore
 
@@ -110,19 +142,35 @@ def assign_complex_possession(
                 game.at[i, f"{player}_positioning_rotation_z"],  # type: ignore
                 game.at[i, f"{player}_positioning_rotation_w"],  # type: ignore
             )
+            yaw_at_jump = None
+            if game.at[i, f"{player}_airborne"]:
+                # Slice all frames up to (but not including) i
+                jump_slice = (
+                    game.loc[: i - 1, f"{player}_jump_active"].fillna(0).astype(int)
+                )
+
+                # Compute the difference to find rising edges (0 -> 1)
+                rising_edges = jump_slice.diff().fillna(0) == 1
+
+                # Get the last rising edge index
+                prev_jump_start_idx = rising_edges[rising_edges].last_valid_index()
+
+                if prev_jump_start_idx is not None:  # type: ignore
+                    yaw_at_jump, _, _ = quat_to_euler(
+                        game.at[prev_jump_start_idx, f"{player}_positioning_rotation_x"],  # type: ignore
+                        game.at[prev_jump_start_idx, f"{player}_positioning_rotation_y"],  # type: ignore
+                        game.at[prev_jump_start_idx, f"{player}_positioning_rotation_z"],  # type: ignore
+                        game.at[prev_jump_start_idx, f"{player}_positioning_rotation_w"],  # type: ignore
+                    )
+
             forward_distance, backward_distance = calculate_distances(
-                vx=vx,
-                vy=vy,
-                yaw=yaw,
+                vx=vx, vy=vy, yaw=yaw, yaw_at_jump=yaw_at_jump
             )
 
             in_possession_range = dist_to_ball[player][i] <= possession_distance
             touched = touched_ball[player][i]
             angle = angle_to_ball[player][i]
             player_dist_to_ball = dist_to_ball[player][i]
-
-            if i >= 639:
-                pass
 
             too_far_forward = (
                 abs(angle) <= forward_angle and player_dist_to_ball > forward_distance
@@ -140,6 +188,9 @@ def assign_complex_possession(
                     if game.at[i, f"{m}_distance_to_ball"] <= challenge_distance:  # type: ignore
                         m_idx = player_names.index(m)
                         players_close.append(m_idx)
+
+            if player == "ItsSoulstice" and i >= 327:
+                pass
 
             # --- Handle touch and directional clears ---
             if touched:
@@ -257,6 +308,7 @@ def assign_complex_possession(
                     }
                 )
 
+    possession_grace_frames = 50
     for player in player_names:
         lost_possession_col = f"{player}_lost_possession_from_distance"
         possession_col = f"{player}_in_possession"
@@ -268,26 +320,43 @@ def assign_complex_possession(
         clean: np.ndarray[Tuple[int, int], np.dtype[np.int_]] = game[clean_col].values  # type: ignore
         contested: np.ndarray[Tuple[int, int], np.dtype[np.int_]] = game[contested_col].values  # type: ignore
 
-        for stint in stints[player]:
-            if stint["valid"]:
-                continue
+        for s_idx, stint in enumerate(stints[player]):
+            next_stint = None
+            if s_idx + 1 < len(stints[player]):
+                next_stint = stints[player][s_idx + 1]
+            combine_with_next_stint = (
+                next_stint
+                and next_stint["start"] - stint["end"] <= possession_grace_frames
+            )
             valid_stint = False
             for other in player_names:
                 if other == player:
                     continue
-                for other_stint in stints[player]:
+                if not combine_with_next_stint and valid_stint:
+                    break
+                for other_stint in stints[other]:
                     if (
-                        other_stint["start"] <= stint["start"]
+                        combine_with_next_stint
+                        and next_stint
+                        and stint["start"] <= other_stint["start"]
+                        and other_stint["start"] <= next_stint["start"]
+                    ):
+                        combine_with_next_stint = False
+                        break
+                    if (
+                        not stint["valid"]
+                        and other_stint["start"] <= stint["start"]
                         and stint["start"] <= other_stint["end"]
                         and other_stint["valid"]
                     ):
                         valid_stint = True
                         break
-                    if stint["end"] < other_stint["start"]:
-                        break
-                if valid_stint:
-                    break
-            if not valid_stint:
+            if not valid_stint and combine_with_next_stint and next_stint:
+                if stint["end"] + 1 <= len(possession):
+                    lost_possession[stint["start"] : stint["end"] + 1] = 0
+                possession[stint["start"] : next_stint["start"]] = 1
+                clean[stint["start"] : next_stint["start"]] = 1
+            if valid_stint:
                 if stint["end"] + 1 <= len(possession):
                     lost_possession[stint["start"] : stint["end"] + 1] = 0
                 possession[stint["start"] : stint["end"]] = 0

@@ -69,6 +69,10 @@ def get_dependent_speed_cols(game: pd.DataFrame, teams: Dict[str, List[str]]):
                 game[f"{player}_positioning_linear_velocity"] >= 2200
             )
 
+            # TODO: Calculate jitter, jitter when grounded, and jitter when airborne
+            # TODO: Calculate speed alignment with hit strength
+            # TODO: Calculate speed alignment with distance from ball
+
     speed_cols["ball_is_stationary"] = game["ball_positioning_linear_velocity"] <= 10
     speed_cols["ball_is_slow"] = game["ball_positioning_linear_velocity"] <= 500
     speed_cols["ball_is_semi_slow"] = (
