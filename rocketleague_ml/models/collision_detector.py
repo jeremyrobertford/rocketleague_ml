@@ -1,14 +1,26 @@
 # type: ignore
 # pyright: reportUnusedVariable=false
 import math
+import numpy as np
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
 # RLUtilities imports
 from rlutilities.simulation import Game, Ball, Car, Input
-from rlutilities.linear_algebra import vec3, mat3, transpose, norm, dot
+from rlutilities.linear_algebra import (
+    vec3,
+    mat3,
+    transpose,
+    norm,
+    dot,
+    cross,
+    normalize,
+)
 from rocketleague_ml.core.frame import Frame
+
+CAR_MASS = 180.0
+CAR_INV_INERTIA = vec3(1 / 400.0, 1 / 500.0, 1 / 300.0)  # approximate inverse inertia
 
 
 class CollisionType(Enum):
@@ -79,6 +91,7 @@ class BallPlayerCollision:
     player_collision_region: str = ""
     frame_number: int = 0
     substep: int = 0  # Which substep in simulation
+    penetration_depth: float = 0
 
     # Ball data
     ball_velocity: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
@@ -118,17 +131,21 @@ class PlayerPlayerCollision:
     player2_name: str = ""
     frame_number: int = 0
     substep: int = 0
+    penetration_depth: float = 0
 
     player1_position: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    player1_velocity_before: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    player1_velocity_after: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
+    player1_velocity: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
+    player1_contact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
+    player1_collision_region: str = ""
 
     player2_position: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    player2_velocity_before: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
+    player2_velocity: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
     player2_velocity_after: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
+    player2_contact_point: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
+    player2_collision_region: str = ""
 
     collision_normal: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
-    relative_velocity: float = 0.0
+    impulse: Vector3 = field(default_factory=lambda: Vector3(0, 0, 0))
 
 
 @dataclass
@@ -190,6 +207,34 @@ def mat3_vec3_mul(M: mat3, v: vec3) -> vec3:
         M[(0, 0)] * v[0] + M[(0, 1)] * v[1] + M[(0, 2)] * v[2],
         M[(1, 0)] * v[0] + M[(1, 1)] * v[1] + M[(1, 2)] * v[2],
         M[(2, 0)] * v[0] + M[(2, 1)] * v[1] + M[(2, 2)] * v[2],
+    )
+
+
+def mat3_mat3_mul(A: mat3, B: mat3) -> mat3:
+    """
+    Matrix–matrix multiplication for RLUtilities mat3 objects.
+    Returns a new mat3.
+    """
+
+    def row(M, i):
+        return vec3(M[(i, 0)], M[(i, 1)], M[(i, 2)])
+
+    def col(M, j):
+        return vec3(M[(0, j)], M[(1, j)], M[(2, j)])
+
+    r1, r2, r3 = row(A, 0), row(A, 1), row(A, 2)
+    c1, c2, c3 = col(B, 0), col(B, 1), col(B, 2)
+
+    return mat3(
+        dot(r1, c1),
+        dot(r2, c1),
+        dot(r3, c1),
+        dot(r1, c2),
+        dot(r2, c2),
+        dot(r3, c2),
+        dot(r1, c3),
+        dot(r2, c3),
+        dot(r3, c3),
     )
 
 
@@ -257,7 +302,7 @@ def get_car_collision_region(car, contact_point: vec3) -> str:
     return region
 
 
-def compute_collision(
+def compute_ball_player_collision(
     ball: Ball,
     player: Car,
 ):
@@ -266,20 +311,19 @@ def compute_collision(
     """
 
     # Approximate contact normal (ball moved toward car)
-    collision_normal = ball.position - player.position
-    collision_normal /= norm(collision_normal)
+    collision_normal = normalize(ball.position - player.position)
 
     # Relative velocity before collision
     relative_velocity = ball.velocity - player.velocity
     velocity_along_normal = dot(relative_velocity, collision_normal)
 
     # Impulse magnitude
-    j = -(1 + ball.restitution) * velocity_along_normal / (1 / ball.mass + 1 / 180)
+    j = -(1 + ball.restitution) * velocity_along_normal / (1 / ball.mass + 1 / CAR_MASS)
     impulse = j * collision_normal
 
     # Apply impulse to velocities
     ball_velocity = ball.velocity + impulse / ball.mass
-    player_velocity = player.velocity + impulse / 180
+    player_velocity = player.velocity + impulse / CAR_MASS
 
     contact_point = ball.position - collision_normal * ball.collision_radius
     car_contact_point = closest_point_on_hitbox(player, contact_point)
@@ -294,6 +338,51 @@ def compute_collision(
         ),
         "ball_contact_point": contact_point,
         "player_contact_point": car_contact_point,
+    }
+
+
+def compute_player_player_collision(player1: Car, player2: Car):
+    """
+    Estimate collision normal, impulse, and post-collision velocities
+    between two cars in Rocket League.
+    """
+
+    # 1. Collision normal: from player1 to player2
+    collision_normal = normalize(player2.position - player1.position)
+
+    # 2. Relative velocity (player2 relative to player1)
+    relative_velocity = player2.velocity - player1.velocity
+    velocity_along_normal = dot(relative_velocity, collision_normal)
+
+    # 3. Combined restitution and mass
+    restitution = 0.3  # Rocket League cars are somewhat bouncy but not much
+    m1, m2 = CAR_MASS, CAR_MASS  # both cars ~180kg
+
+    # 4. Impulse magnitude (equal and opposite for both cars)
+    j = -(1 + restitution) * velocity_along_normal / (1 / m1 + 1 / m2)
+    impulse = j * collision_normal
+
+    # 5. New velocities after collision
+    new_v1 = player1.velocity - impulse / m1
+    new_v2 = player2.velocity + impulse / m2
+
+    # 6. Approximate contact points on each car hitbox
+    contact_point_p1 = closest_point_on_hitbox(player1, player2.position)
+    contact_point_p2 = closest_point_on_hitbox(player2, player1.position)
+
+    # 7. Collision regions (optional labeling of where contact occurred)
+    region_p1 = get_car_collision_region(player1, contact_point_p1)
+    region_p2 = get_car_collision_region(player2, contact_point_p2)
+
+    return {
+        "collision_normal": collision_normal,
+        "impulse": impulse,
+        "player1_velocity": new_v1,
+        "player2_velocity": new_v2,
+        "player1_contact_point": contact_point_p1,
+        "player2_contact_point": contact_point_p2,
+        "player1_collision_region": region_p1,
+        "player2_collision_region": region_p2,
     }
 
 
@@ -331,7 +420,130 @@ def closest_point_on_hitbox(car: Car, point: vec3) -> vec3:
     return world_point
 
 
-class RocketLeagueCollisionDetector:
+def orthonormalize(m: mat3) -> mat3:
+    # Extract basis vectors
+    def col(M, j):
+        return vec3(M[(0, j)], M[(1, j)], M[(2, j)])
+
+    x = col(m, 0)
+    y = col(m, 1)
+    z = col(m, 2)
+
+    # Gram–Schmidt process
+    x = normalize(x)
+    y = y - x * dot(x, y)
+    y = normalize(y)
+    z = cross(x, y)
+
+    return mat3(
+        x[0],
+        x[1],
+        x[2],
+        y[0],
+        y[1],
+        y[2],
+        z[0],
+        z[1],
+        z[2],
+    )
+
+
+def world_inv_inertia(car):
+    """Compute world-space inverse inertia tensor for an RLUtilities Car."""
+    I_body_inv = mat3(
+        CAR_INV_INERTIA.x,
+        0,
+        0,
+        0,
+        CAR_INV_INERTIA.y,
+        0,
+        0,
+        0,
+        CAR_INV_INERTIA.z,
+    )
+    R = car.orientation
+    return mat3_mat3_mul(mat3_mat3_mul(R, I_body_inv), transpose(R))
+
+
+def add_vec3(a, b):
+    return vec3(a.x + b.x, a.y + b.y, a.z + b.z)
+
+
+def sub_vec3(a, b):
+    return vec3(a.x - b.x, a.y - b.y, a.z - b.z)
+
+
+def apply_car_collision_response(car1, car2, collision):
+    """
+    Applies linear and angular impulse from a car–car collision to both cars.
+    Works with RLUtilities Car objects.
+    """
+
+    n = normalize(collision.collision_normal.to_vec3())
+    impulse = collision.impulse.to_vec3()
+
+    # Contact points relative to centers
+    r1 = collision.player1_contact_point.to_vec3() - car1.position
+    r2 = collision.player2_contact_point.to_vec3() - car2.position
+
+    # --- Linear velocities ---
+    car1.velocity -= impulse / CAR_MASS
+    car2.velocity += impulse / CAR_MASS
+
+    # --- Angular velocities ---
+    I1_inv = world_inv_inertia(car1)
+    I2_inv = world_inv_inertia(car2)
+
+    neg_impulse = vec3(-impulse[0], -impulse[1], -impulse[2])
+    dw1 = mat3_vec3_mul(I1_inv, cross(r1, neg_impulse))
+    dw2 = mat3_vec3_mul(I2_inv, cross(r2, impulse))
+
+    car1.angular_velocity += dw1
+    car2.angular_velocity += dw2
+
+    # --- Positional correction ---
+    correction = 0.5 * collision.penetration_depth * n
+    car1.position = sub_vec3(car1.position, correction)
+    car2.position = add_vec3(car2.position, correction)
+
+    # --- Optional stabilization ---
+    car1.orientation = orthonormalize(car1.orientation)
+    car2.orientation = orthonormalize(car2.orientation)
+
+
+class Car_OBB:
+    def __init__(self, car):
+        self.center = add_vec3(car.position, car.hitbox_offset)
+        self.half_extents = car.hitbox_widths
+        self.orientation = car.orientation
+
+    def get_penetration_depth(self, obb2):
+        # Vector from obb1 center to obb2 center in world space
+        d = sub_vec3(obb2.center, self.center)
+
+        # Transform d into obb1 local space
+        d_local = mat3_vec3_mul(transpose(self.orientation), d)
+
+        # Project obb2 onto obb1 axes
+        total_penetration = []
+        for i in range(3):
+            overlap = self.half_extents[i] + obb2.half_extents[i] - abs(d_local[i])
+            total_penetration.append(overlap)
+
+        # Smallest positive overlap is the separating axis
+        penetration_depth = min([p for p in total_penetration if p > 0], default=0)
+        return penetration_depth
+
+
+def world_to_local(obb, point):
+    # Translate to OBB local origin
+    rel = sub_vec3(point, obb.center)
+    # Rotate into local space
+    local = mat3_vec3_mul(transpose(obb.orientation), rel)
+    return local
+
+
+class Rocket_League_Collision_Detector:
     """
     High-granularity collision detector using RLUtilities simulation.
 
@@ -345,7 +557,7 @@ class RocketLeagueCollisionDetector:
     # Physics constants
     BALL_MASS = 30.0
     BALL_RADIUS = 91.25
-    CAR_MASS = 180.0  # Approximate
+    CAR_MASS = CAR_MASS
 
     # Detection thresholds (much tighter for substep detection)
     BALL_VELOCITY_THRESHOLD = 10.0  # Smaller threshold for substeps
@@ -512,7 +724,7 @@ class RocketLeagueCollisionDetector:
             will_collide = distance <= curr_game.ball.collision_radius
 
             if will_collide:
-                collision_values = compute_collision(
+                collision_values = compute_ball_player_collision(
                     ball=prev_game.ball,
                     player=prev_car,
                 )
@@ -547,49 +759,55 @@ class RocketLeagueCollisionDetector:
 
         # Detect player collisions
         for name, idx in player_name_map.items():
-            if idx >= len(curr_game.cars):
-                continue
-
             car = curr_game.cars[idx]
             prev_car = prev_game.cars[idx]
 
-            car_vel_change = Vector3.from_vec3(car.velocity) - Vector3.from_vec3(
-                prev_car.velocity
-            )
+            for other_name, other_idx in player_name_map.items():
+                if other_name == name or other_idx >= len(curr_game.cars):
+                    continue
 
-            if car_vel_change.magnitude() > self.PLAYER_VELOCITY_THRESHOLD:
-                # Check player-player collisions
-                for other_name, other_idx in player_name_map.items():
-                    if other_name == name or other_idx >= len(curr_game.cars):
-                        continue
+                other_car = curr_game.cars[other_idx]
+                prev_other_car = prev_game.cars[other_idx]
+                distance = Vector3.from_vec3(car.position).distance_to(
+                    Vector3.from_vec3(other_car.position)
+                )
 
-                    other_car = curr_game.cars[other_idx]
-                    distance = Vector3.from_vec3(car.position).distance_to(
-                        Vector3.from_vec3(other_car.position)
+                if distance < self.COLLISION_DISTANCE_THRESHOLD:
+                    car_obb = Car_OBB(car)
+                    other_car_obb = Car_OBB(other_car)
+
+                    collision_values = compute_player_player_collision(
+                        player1=prev_car,
+                        player2=prev_other_car,
                     )
-
-                    if distance < self.COLLISION_DISTANCE_THRESHOLD:
-                        collision = PlayerPlayerCollision(
-                            player1_name=name,
-                            player2_name=other_name,
-                            frame_number=frame_number,
-                            substep=substep,
-                            player1_position=Vector3.from_vec3(car.position),
-                            player1_velocity_before=Vector3.from_vec3(
-                                prev_car.velocity
-                            ),
-                            player1_velocity_after=Vector3.from_vec3(car.velocity),
-                            player2_position=Vector3.from_vec3(other_car.position),
-                            player2_velocity_before=Vector3.from_vec3(
-                                prev_game.cars[other_idx].velocity
-                            ),
-                            player2_velocity_after=Vector3.from_vec3(
-                                other_car.velocity
-                            ),
-                            collision_normal=car_vel_change.normalized(),
-                            relative_velocity=car_vel_change.magnitude(),
-                        )
-                        collisions.player_player_collisions.append(collision)
+                    collision = PlayerPlayerCollision(
+                        player1_name=name,
+                        player2_name=other_name,
+                        frame_number=frame_number,
+                        substep=substep,
+                        penetration_depth=car_obb.get_penetration_depth(other_car_obb),
+                        player1_position=Vector3.from_vec3(car.position),
+                        player1_velocity=Vector3.from_vec3(car.velocity),
+                        player2_position=Vector3.from_vec3(other_car.position),
+                        player2_velocity=Vector3.from_vec3(other_car.velocity),
+                        player1_contact_point=Vector3.from_vec3(
+                            collision_values["player1_contact_point"]
+                        ),
+                        player1_collision_region=collision_values[
+                            "player1_collision_region"
+                        ],
+                        player2_contact_point=Vector3.from_vec3(
+                            collision_values["player2_contact_point"]
+                        ),
+                        player2_collision_region=collision_values[
+                            "player2_collision_region"
+                        ],
+                        impulse=Vector3.from_vec3(collision_values["impulse"]),
+                        collision_normal=Vector3.from_vec3(
+                            collision_values["collision_normal"]
+                        ),
+                    )
+                    collisions.player_player_collisions.append(collision)
 
                 # Check player-environment collisions
                 env_collision = self._detect_player_environment_collision(
@@ -614,7 +832,7 @@ class RocketLeagueCollisionDetector:
         vel_change = curr_vel - prev_vel
 
         # Ground
-        if pos.z <= self.BALL_RADIUS + 10 and vel_change.z > 0:
+        if pos.z <= curr_ball.collision_radius * 1.25 and vel_change.z > 0:
             return BallEnvironmentCollision(
                 surface=EnvironmentSurface.GROUND,
                 frame_number=frame_number,
@@ -628,7 +846,7 @@ class RocketLeagueCollisionDetector:
             )
 
         # Ceiling (z = 2044)
-        if pos.z >= 2044 - self.BALL_RADIUS - 10 and vel_change.z < 0:
+        if pos.z >= 2044 - curr_ball.collision_radius * 1.25 and vel_change.z < 0:
             return BallEnvironmentCollision(
                 surface=EnvironmentSurface.CEILING,
                 frame_number=frame_number,
@@ -642,7 +860,7 @@ class RocketLeagueCollisionDetector:
             )
 
         # Side walls (y = ±4096)
-        if abs(pos.y) >= 4096 - self.BALL_RADIUS - 10:
+        if abs(pos.y) >= 4096 - curr_ball.collision_radius * 1.25:
             side = 1 if pos.y > 0 else -1
             if vel_change.y * -side > 0:
                 return BallEnvironmentCollision(
@@ -658,7 +876,7 @@ class RocketLeagueCollisionDetector:
                 )
 
         # Back walls (x = ±5120)
-        if abs(pos.x) >= 5120 - self.BALL_RADIUS - 10:
+        if abs(pos.x) >= 5120 - curr_ball.collision_radius * 1.25:
             side = 1 if pos.x > 0 else -1
             if vel_change.x * -side > 0:
                 return BallEnvironmentCollision(
@@ -780,6 +998,10 @@ class RocketLeagueCollisionDetector:
             )
             if collisions.has_collisions():
                 all_collisions.append(collisions)
+                for collision in collisions.player_player_collisions:
+                    car1 = game.cars[player_map[collision.player1_name]]
+                    car2 = game.cars[player_map[collision.player2_name]]
+                    apply_car_collision_response(car1, car2, collision)
                 for collision in collisions.ball_player_collisions:
                     ball = game.ball
                     car = game.cars[player_map[collision.player_name]]
