@@ -1020,6 +1020,8 @@ class Rocket_League_Collision_Detector:
             prev_game = self._copy_game_state(game)
             substep_count += 1
 
+            # TODO: check car positions to check for bump
+
             # Vector from car to ball
             to_ball = game.ball.position - car.position  # vec3
 
