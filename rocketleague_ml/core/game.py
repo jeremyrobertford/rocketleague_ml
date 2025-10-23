@@ -125,6 +125,7 @@ class Game:
 
     def process_setting_new_actor(
         self,
+        frame: Frame,
         new_actor: Actor,
         players: Dict[int, Player],
         player_cars: Dict[int, int],
@@ -214,6 +215,7 @@ class Game:
                         self.players.get(player_actor_id) or players[player_actor_id]
                     )
                     player.assign_team(new_actor.secondary_category)
+                    frame.processed_fields[f"{player.name}_team"] = player.team
             case "camera_settings":
                 raw_camera_settings = camera_settings[new_actor.actor_id]
                 player_actor_id = player_camera_settings[new_actor.actor_id]
@@ -301,6 +303,7 @@ class Game:
             new_actor = Actor(na, self.objects)
             self.process_setting_new_actor(
                 new_actor=new_actor,
+                frame=frame,
                 players=players,
                 player_cars=player_cars,
                 player_teams=player_teams,
@@ -316,6 +319,7 @@ class Game:
         for new_actor in delayed_new_actors.values():
             self.process_setting_new_actor(
                 new_actor=new_actor,
+                frame=frame,
                 players=players,
                 player_cars=player_cars,
                 player_teams=player_teams,

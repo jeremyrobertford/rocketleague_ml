@@ -6,6 +6,7 @@ import os
 import pandas as pd
 from rocketleague_ml.config import PROCESSED
 from rocketleague_ml.models.pipeline import Rocket_League_Pipeline
+from rocketleague_ml.models.game_wrangler import Game_Wrangler
 
 # from rocketleague_ml.models.principle_component_analyzer import (
 #     Principle_Component_Analyzer,
@@ -44,18 +45,18 @@ def main():
 
         return result
 
-    process()
+    # process()
 
     def extract_features():  # pyright: ignore[reportUnusedFunction]
         processed_game = pipeline.processor.load_processed_file("debug.csv")
-        features = pipeline.extractor.extract_features(
+        wrangler = Game_Wrangler()
+        wrangled_game = wrangler.wrangle_game(processed_game)
+        pipeline.extractor.extract_features(
             main_player="RL_LionHeart",
-            games=[processed_game],
-            save_output=False,
+            games=[wrangled_game],
+            save_output=True,
             overwrite=True,
         )
-        if features is not None:
-            print(features.describe().T)
 
     extract_features()
     # features = pipeline.extractor.load_features()

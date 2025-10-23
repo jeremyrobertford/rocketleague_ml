@@ -189,7 +189,6 @@ class Rocket_League_Feature_Extractor:
                 axis=1,
             )
 
-        game.to_csv(os.path.join(FEATURES, "debug.csv"), index=False)
         return game
 
     def aggregate_features(

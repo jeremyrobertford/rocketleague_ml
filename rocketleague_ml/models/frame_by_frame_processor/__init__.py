@@ -18,60 +18,8 @@ from rocketleague_ml.types.attributes import (
 from rocketleague_ml.models.frame_by_frame_processor.processors import processors
 from rocketleague_ml.models.game_data_wrangler import Game_Data_Wrangler
 from rocketleague_ml.models.collision_detector import (
-    BallPlayerCollision,
     PlayerPlayerCollision,
 )
-
-
-def update_ball_player_collision_fields(
-    collision: BallPlayerCollision, collisions: Dict[str, Dict[str, Any]]
-):
-    player_name = collision.player_name
-    field_label = f"{player_name}_hit_ball"
-    if player_name not in collisions:
-        collisions[player_name] = {}
-        collisions[player_name][field_label + "_total_impulse_x"] = 0
-        collisions[player_name][field_label + "_total_impulse_y"] = 0
-        collisions[player_name][field_label + "_total_impulse_z"] = 0
-        collisions[player_name][field_label + "_total_touches"] = 0
-        collisions[player_name][field_label + "_total_contact_time"] = 0
-        field_label += "_first_contact"
-        collisions[player_name][
-            field_label + "_car_collision_region"
-        ] = collision.player_collision_region
-        collisions[player_name][
-            field_label + "_linear_velocity_x"
-        ] = collision.ball_velocity.x
-        collisions[player_name][
-            field_label + "_linear_velocity_y"
-        ] = collision.ball_velocity.y
-        collisions[player_name][
-            field_label + "_linear_velocity_z"
-        ] = collision.ball_velocity.z
-        collisions[player_name][
-            field_label + "_impulse_x"
-        ] = collision.collision_normal.x
-        collisions[player_name][
-            field_label + "_impulse_y"
-        ] = collision.collision_normal.y
-        collisions[player_name][
-            field_label + "_impulse_z"
-        ] = collision.collision_normal.z
-        collisions[player_name][
-            field_label + "_collision_normal_x"
-        ] = collision.collision_normal.x
-        collisions[player_name][
-            field_label + "_collision_normal_y"
-        ] = collision.collision_normal.y
-        collisions[player_name][
-            field_label + "_collision_normal_z"
-        ] = collision.collision_normal.z
-    else:
-        collisions[player_name][field_label + "_total_impulse_x"] += collision.impulse.x
-        collisions[player_name][field_label + "_total_impulse_y"] += collision.impulse.y
-        collisions[player_name][field_label + "_total_impulse_z"] += collision.impulse.z
-        collisions[player_name][field_label + "_total_touches"] += 1
-        collisions[player_name][field_label + "_total_contact_time"] += 1 / 120
 
 
 def update_player_player_collision_fields(
@@ -524,32 +472,21 @@ class Frame_By_Frame_Processor:
                 previous_frame=game.previous_frame,
                 frame_number=f,
             )
-            ball_player_collisions: Dict[str, Any] = {}
-            player_player_collisions: Dict[str, Any] = {}
             for collision in collisions:
                 for player_player_collision in collision.player_player_collisions:
-                    update_player_player_collision_fields(
-                        player_player_collision, player_player_collisions
-                    )
+                    field_label = f"{player_player_collision.player1_name}_hit_player_substep_{player_player_collision.player2_name}"
+                    if field_label not in frame.processed_fields:
+                        frame.processed_fields[field_label] = (
+                            player_player_collision.substep
+                        )
                 for ball_player_collision in collision.ball_player_collisions:
-                    update_ball_player_collision_fields(
-                        ball_player_collision, ball_player_collisions
+                    field_label = (
+                        f"{ball_player_collision.player_name}_hit_ball_substep"
                     )
-            for (
-                player_name,
-                p_p_collisions,
-            ) in player_player_collisions.items():
-                for player_player_collision_fields in p_p_collisions.values():
-                    frame.processed_fields = (
-                        frame.processed_fields | player_player_collision_fields
-                    )
-            for (
-                player_name,
-                ball_player_collision_fields,
-            ) in ball_player_collisions.items():
-                frame.processed_fields = (
-                    frame.processed_fields | ball_player_collision_fields
-                )
+                    if field_label not in frame.processed_fields:
+                        frame.processed_fields[field_label] = (
+                            ball_player_collision.substep
+                        )
         return frame
 
     def process_game(self, game_data: Raw_Game_Data) -> List[Dict[str, Any]]:
@@ -638,7 +575,7 @@ class Frame_By_Frame_Processor:
             for game_data in game_datas:
                 game_id = game_data["properties"]["Id"]
                 self.logger.print(
-                    f"Parsing {game_id} -> {PROCESSED} ...",
+                    f"Processing {game_id} -> {PROCESSED} ...",
                     end=" ",
                     flush=True,
                 )

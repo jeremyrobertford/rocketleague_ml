@@ -57,6 +57,8 @@ processors: Dict[str, Callable[[Frame_By_Frame_Processor, Actor, Frame], None]] 
     "car_component.activate_handbrake": process_activate_handbrake,
     "car_component": process_car_component,
     "player_component.team": process_player_team,
+    "player_component.Blue": process_player_team,
+    "player_component.Orange": process_player_team,
     "game_start_event": process_game_start,
     "rigid_body": process_rigid_body_position,
     "player_demoed": process_demo,

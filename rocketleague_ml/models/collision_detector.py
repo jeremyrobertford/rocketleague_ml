@@ -1,10 +1,15 @@
 # type: ignore
 # pyright: reportUnusedVariable=false
 import math
+import os
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+import pandas as pd
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from enum import Enum
+from rocketleague_ml.config import PROCESSED
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 # RLUtilities imports
 from rlutilities.simulation import Game, Ball, Car, Input
@@ -37,6 +42,73 @@ class EnvironmentSurface(Enum):
     BACK_WALL = "back_wall"
     CORNER = "corner"
     GOAL_WALL = "goal_wall"
+
+
+@dataclass
+class Matrix3:
+    def __init__(self, data):
+        """
+        Initialize from:
+        - 3x3 nested list/tuple
+        - numpy array of shape (3,3)
+        """
+        self._data = np.array(data, dtype=float).reshape((3, 3))
+
+    @classmethod
+    def from_mat3(cls, mat3_tuple):
+        """Convert from a flat 9-element tuple/list (row-major) to Matrix3"""
+        mat = np.array(
+            [
+                [mat3_tuple[(0, 0)], mat3_tuple[(0, 1)], mat3_tuple[(0, 2)]],
+                [mat3_tuple[(1, 0)], mat3_tuple[(1, 1)], mat3_tuple[(1, 2)]],
+                [mat3_tuple[(2, 0)], mat3_tuple[(2, 1)], mat3_tuple[(2, 2)]],
+            ],
+            dtype=float,
+        ).reshape((3, 3))
+        return cls(mat)
+
+    def to_mat3(self):
+        """Convert back to flat 9-element tuple (row-major)"""
+        return tuple(self._data.flatten())
+
+    @property
+    def data(self):
+        """Access underlying NumPy array"""
+        return self._data
+
+    # Support basic NumPy operations transparently
+    def __array__(self):
+        """Allows np functions to work directly on Matrix3"""
+        return self._data
+
+    def __getitem__(self, idx):
+        return self._data[idx]
+
+    def __setitem__(self, idx, value):
+        self._data[idx] = value
+
+    def __repr__(self):
+        return f"Matrix3({self._data})"
+
+    # Arithmetic operations
+    def __add__(self, other):
+        return Matrix3(self._data + np.array(other))
+
+    def __sub__(self, other):
+        return Matrix3(self._data - np.array(other))
+
+    def __mul__(self, other):
+        return Matrix3(self._data * np.array(other))
+
+    def __matmul__(self, other):
+        """Matrix multiplication"""
+        return Matrix3(self._data @ np.array(other))
+
+    def transpose(self):
+        return Matrix3(self._data.T)
+
+    def copy(self):
+        return Matrix3(self._data.copy())
 
 
 @dataclass
@@ -608,6 +680,11 @@ class Rocket_League_Collision_Detector:
             if c.endswith("_positioning_x") and not c.startswith("ball_")
         ]
         game.cars = [Car() for c in range(len(players))]
+        teams = (
+            {player: frame_data[f"{player}_team"] for player in players}
+            if len([c for c in frame_data if c.endswith("team")]) > 0
+            else {}
+        )
 
         # Set ball state
         game.ball.position = vec3(
@@ -662,7 +739,7 @@ class Rocket_League_Collision_Detector:
             # Set default input (no control)
             car.controls = self.get_player_input(frame, name)
 
-        return game, player_name_to_index
+        return game, player_name_to_index, teams
 
     def _quaternion_to_matrix(self, x: float, y: float, z: float, w: float) -> mat3:
         """Convert quaternion to rotation matrix."""
@@ -693,6 +770,163 @@ class Rocket_League_Collision_Detector:
             car.position + car.orientation @ (car.hitbox_offset + o) for o in offsets
         ]
 
+    def plot_game(
+        self,
+        prev_game,
+        curr_game,
+        player_name_map: dict,
+        frame_number: int,
+        substep: int,
+        teams: dict,
+    ):
+        # Only plot specific frames if desired
+        if not (171 <= frame_number <= 172) or substep > 20:
+            return
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+        ax.set_title(f"Frame {frame_number} - Substep {substep}")
+
+        # Rocket League field dimensions (uu)
+        field_length = 10280  # along Y axis
+        field_width = 8240  # along X axis
+
+        # Set consistent field limits
+        ax.set_xlim(-field_width / 2, field_width / 2)
+        ax.set_ylim(-field_length / 2, field_length / 2)
+        # ax.set_aspect("equal")
+        ax.set_xlabel("X (uu)")
+        ax.set_ylabel("Y (uu)")
+        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+
+        # Draw field outline
+        field_rect = patches.Rectangle(
+            (-field_width / 2, -field_length / 2),
+            field_width,
+            field_length,
+            linewidth=1.2,
+            edgecolor="green",
+            facecolor="none",
+        )
+        ax.add_patch(field_rect)
+
+        # Draw center line
+        ax.axhline(0, color="gray", linestyle="--", linewidth=1)
+
+        # Draw ball
+        ball_pos = curr_game.ball.position  # [x, y, z]
+        ball_radius = curr_game.ball.collision_radius
+        ball_circle = patches.Circle(
+            (-ball_pos[0], ball_pos[1]),  # flip X for visual consistency
+            radius=ball_radius,
+            color="orange",
+            label="Ball",
+        )
+        ax.add_patch(ball_circle)
+
+        # ---- DRAW CARS ----
+        def draw_cars(game, current=False):
+            for player_name, car_idx in player_name_map.items():
+                car = game.cars[car_idx]
+
+                # Convert car data to numpy
+                pos = np.array([car.position[0], car.position[1], car.position[2]])
+                if abs(pos[0]) > 1000 or abs(pos[1]) > 1000:
+                    continue
+                hitbox_offset = np.array(
+                    [car.hitbox_offset[0], car.hitbox_offset[1], car.hitbox_offset[2]]
+                )
+
+                # Convert orientation (mat3) to numpy 3×3
+                ori = Matrix3.from_mat3(car.orientation)
+                flip_matrix = np.array(
+                    [
+                        [-1, 0, 0],
+                        [0, 1, 0],
+                        [0, 0, -1],
+                    ]
+                )
+                if teams[player_name] == "Blue":
+                    ori = flip_matrix @ ori
+
+                # Compute hitbox center in world space
+                hitbox_center_world = pos + np.array(ori) @ hitbox_offset
+
+                forward = ori[:, 0]
+
+                # ---- VISUAL COORDINATE ADJUSTMENT ----
+                # Flip X to match intuitive left-right top-down field orientation
+                hitbox_center_world[0] = -hitbox_center_world[0]
+
+                # Compute 2D yaw
+                forward_yaw = np.arctan2(forward[1], forward[0])
+
+                # Get hitbox dimensions
+                car_length = car.hitbox_widths[0] * 2  # forward/back
+                car_width = car.hitbox_widths[1] * 2  # left/right
+
+                # Create car rectangle centered at origin
+                rect = patches.Rectangle(
+                    (-car_length / 2, -car_width / 2),
+                    car_length,
+                    car_width,
+                    linewidth=1.2,
+                    edgecolor="blue" if teams[player_name] == "Blue" else "orange",
+                    facecolor="none",
+                    alpha=0.2 if not current else 1,
+                )
+
+                # Apply rotation + translation
+                t = (
+                    patches.transforms.Affine2D()
+                    .rotate_around(0, 0, forward_yaw)
+                    .translate(hitbox_center_world[0], hitbox_center_world[1])
+                    + ax.transData
+                )
+                rect.set_transform(t)
+                ax.add_patch(rect)
+
+                # Draw forward arrow
+                arrow_length = 150
+                arrow_end = hitbox_center_world + forward * arrow_length
+
+                if current:
+                    ax.arrow(
+                        hitbox_center_world[0],
+                        hitbox_center_world[1],
+                        arrow_end[0] - hitbox_center_world[0],
+                        arrow_end[1] - hitbox_center_world[1],
+                        color="red",
+                        linewidth=2,
+                        head_width=30,
+                        head_length=40,
+                        alpha=0.7,
+                    )
+
+                # Player label
+                if current:
+                    ax.text(
+                        hitbox_center_world[0],
+                        hitbox_center_world[1] - car_width / 2 - 50,
+                        player_name,
+                        ha="center",
+                        va="top",
+                        fontsize=8,
+                        color="blue" if car.team == 0 else "orange",
+                        fontweight="bold",
+                    )
+
+        draw_cars(curr_game, True)
+        draw_cars(prev_game)
+        # Legend
+        ax.plot([], [], "o", color="orange", label="Ball")
+        ax.plot([], [], "s", color="blue", label="Blue Team")
+        ax.plot([], [], "s", color="orange", label="Orange Team")
+        ax.legend(loc="upper right")
+
+        plt.tight_layout()
+        plt.show(block=True)
+        pass
+
     def detect_collisions_between_states(
         self,
         prev_game: Game,
@@ -700,6 +934,7 @@ class Rocket_League_Collision_Detector:
         player_name_map: Dict[str, int],
         frame_number: int,
         substep: int,
+        teams: Dict[str, str],
     ) -> FrameCollisions:
         """
         Detect collisions by comparing two game states.
@@ -713,6 +948,14 @@ class Rocket_League_Collision_Detector:
         """
         collisions = FrameCollisions(frame_number=frame_number)
 
+        # self.plot_game(
+        #     prev_game=prev_game,
+        #     curr_game=curr_game,
+        #     player_name_map=player_name_map,
+        #     frame_number=frame_number,
+        #     substep=substep,
+        #     teams=teams,
+        # )
         # Check ball-player collisions
         for name, idx in player_name_map.items():
             car = curr_game.cars[idx]
@@ -971,8 +1214,8 @@ class Rocket_League_Collision_Detector:
         Returns:
             List of FrameCollisions, one for each substep that had collisions
         """
-        game, player_map = self.frame_to_game_state(frame)
-        prev_game, _ = self.frame_to_game_state(previous_frame)
+        game, player_map, teams = self.frame_to_game_state(frame)
+        prev_game, _, _ = self.frame_to_game_state(previous_frame)
 
         all_collisions: List[FrameCollisions] = []
 
@@ -994,7 +1237,7 @@ class Rocket_League_Collision_Detector:
 
             # Detect collisions between previous and current step
             collisions = self.detect_collisions_between_states(
-                prev_game, game, player_map, frame_number, substep_count
+                prev_game, game, player_map, frame_number, substep_count, teams
             )
             if collisions.has_collisions():
                 all_collisions.append(collisions)
@@ -1005,7 +1248,6 @@ class Rocket_League_Collision_Detector:
                 for collision in collisions.ball_player_collisions:
                     ball = game.ball
                     car = game.cars[player_map[collision.player_name]]
-
                     # Apply the new velocities
                     ball.velocity = collision.ball_velocity.to_vec3()
                     car.velocity = collision.player_velocity.to_vec3()
